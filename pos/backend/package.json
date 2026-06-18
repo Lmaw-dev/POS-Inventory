@@ -4,11 +4,13 @@
   "private": true,
   "scripts": {
     "start": "node dist/main.js",
-    "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
+    "start:dev": "ts-node-dev --respawn --transpile-only --exit-child src/main.ts",
     "build": "tsc -p tsconfig.build.json",
     "format": "prettier --write \"src/**/*.ts\"",
     "db:local": "node scripts/switch-database.js local",
     "db:supabase": "node scripts/switch-database.js supabase",
+    "db:seed-demo": "node scripts/seed-demo-accounts.js",
+    "db:verify-demo": "node scripts/verify-demo-accounts.js",
     "db:fix-sequences": "node scripts/fix-sequences.js",
     "db:migrate-product-codes": "node scripts/migrate-numeric-product-codes.js"
   },

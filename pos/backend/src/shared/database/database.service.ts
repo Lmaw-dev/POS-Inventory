@@ -53,8 +53,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     const maxPoolConnections = Number(process.env.DB_POOL_MAX ?? 3);
     const poolOptions = {
       max: Number.isFinite(maxPoolConnections) && maxPoolConnections > 0 ? maxPoolConnections : 3,
-      idleTimeoutMillis: Number(process.env.DB_POOL_IDLE_TIMEOUT_MS ?? 10000),
+      idleTimeoutMillis: Number(process.env.DB_POOL_IDLE_TIMEOUT_MS ?? 5000),
       connectionTimeoutMillis: Number(process.env.DB_POOL_CONNECTION_TIMEOUT_MS ?? 10000),
+      allowExitOnIdle: true,
     };
 
     this.pool = connectionString
@@ -82,18 +83,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       const result = await this.pool.query<T>(sql, params);
       return result.rows;
     } catch (error) {
-      const databaseError = error as { code?: string; message?: string };
-      const connectionErrorCodes = new Set(['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', '28P01', '3D000', 'XX000']);
-
-      if (databaseError.code === 'XX000') {
-        if (databaseError.message?.includes('max clients reached')) {
-          throw new ServiceUnavailableException('PostgreSQL connection limit reached. Stop extra backend processes or lower DB_POOL_MAX.');
-        }
-
-        throw error;
+      if (this.isDatabaseConnectionLimitError(error)) {
+        throw new ServiceUnavailableException('PostgreSQL connection limit reached. Stop extra backend processes, wait 30-60 seconds for Supabase to release stale sessions, then start only one backend.');
       }
 
-      if (databaseError.code && !connectionErrorCodes.has(databaseError.code)) {
+      if (!this.isDatabaseConnectivityError(error)) {
         throw error;
       }
 
@@ -102,7 +96,21 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   }
 
   async withTransaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
-    const client = await this.pool.connect();
+    let client: PoolClient;
+
+    try {
+      client = await this.pool.connect();
+    } catch (error) {
+      if (this.isDatabaseConnectionLimitError(error)) {
+        throw new ServiceUnavailableException('PostgreSQL connection limit reached. Stop extra backend processes, wait 30-60 seconds for Supabase to release stale sessions, then start only one backend.');
+      }
+
+      if (this.isDatabaseConnectivityError(error)) {
+        throw new ServiceUnavailableException('PostgreSQL is not reachable or is missing credentials. Check backend/.env and database status.');
+      }
+
+      throw error;
+    }
 
     try {
       await client.query('BEGIN');
@@ -120,6 +128,20 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   async queryWithClient<T extends QueryResultRow>(client: PoolClient, sql: string, params: unknown[] = []): Promise<T[]> {
     const result = await client.query<T>(sql, params);
     return result.rows;
+  }
+
+  private isDatabaseConnectionLimitError(error: unknown): boolean {
+    const databaseError = error as { code?: string; message?: string };
+    const message = databaseError.message ?? '';
+
+    return databaseError.code === '53300' || message.includes('max clients reached') || message.includes('EMAXCONNSESSION');
+  }
+
+  private isDatabaseConnectivityError(error: unknown): boolean {
+    const databaseError = error as { code?: string };
+    const connectionErrorCodes = new Set(['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', '28P01', '3D000', 'XX000']);
+
+    return Boolean(databaseError.code && connectionErrorCodes.has(databaseError.code));
   }
 
   async getLoginUserByEmail(email: string): Promise<AuthenticatedUser & { password_hash: string } | null> {

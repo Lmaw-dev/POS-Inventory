@@ -6,6 +6,33 @@ import centerLogoImage from "../../imports/ims-logo-nobg.png";
 
 const REMEMBERED_EMAIL_KEY = "ims_remembered_email";
 
+const DEMO_ACCOUNT_GROUPS = [
+  {
+    label: "Superadmin",
+    accounts: [
+      { role: "Superadmin", email: "superadmin@gmail.com", pwd: "superadmin123", color: "#003534" },
+    ],
+  },
+  {
+    label: "Restaurant Accounts",
+    accounts: [
+      { role: "Admin", email: "restaurantadmin@gmail.com", pwd: "restaurantadmin123", color: "#007A5E" },
+      { role: "POS Staff", email: "resstaff@pos.com", pwd: "resstaffpos123", color: "#0f766e" },
+      { role: "Inventory Staff", email: "resstaff@inventory.com", pwd: "resstaffinventory123", color: "#2563eb" },
+      { role: "Manager", email: "resstaff@manager.com", pwd: "resstaffmanager123", color: "#7c3aed" },
+    ],
+  },
+  {
+    label: "Retail Accounts",
+    accounts: [
+      { role: "Admin", email: "retailadmin@gmail.com", pwd: "retailadmin123", color: "#005656" },
+      { role: "POS Staff", email: "retailstaff@pos.com", pwd: "retailstaffpos123", color: "#0f766e" },
+      { role: "Inventory Staff", email: "retailstaff@inventory.com", pwd: "retailstaffinventory123", color: "#2563eb" },
+      { role: "Manager", email: "retailstaff@manager.com", pwd: "retailstaffmanager123", color: "#7c3aed" },
+    ],
+  },
+];
+
 const CSS_ANIMATIONS = `
   @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
   @keyframes floatX { 0%,100%{transform:translateX(0)} 50%{transform:translateX(8px)} }
@@ -308,29 +335,39 @@ export function Login() {
                   <span className="px-3 text-xs text-[#9ca3af] bg-[#F8FAFB]">Demo accounts</span>
                   <div className="flex-1 h-px bg-[#e5e7eb]" />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { role: "Admin", email: "admin@bukolabs.io", pwd: "admin123", color: "#005656" },
-                    { role: "Admin", email: "admin@restaurant.com", pwd: "admin123", color: "#007A5E" },
-                  ].map((cred) => (
-                    <button
-                      key={cred.role}
-                      type="button"
-                      onClick={() => { setEmail(cred.email); setPassword(cred.pwd); }}
-                      className="p-3 rounded-xl border border-[#e5e7eb] bg-white hover:border-[#005656]/30 hover:bg-[#f0f7f7] transition-all text-left"
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <div
-                          className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
-                          style={{ background: cred.color }}
-                        >
-                          {cred.role[0]}
-                        </div>
-                        <span className="text-xs font-semibold text-[#323B42]">{cred.role}</span>
+                <div className="max-h-72 overflow-y-auto pr-1 space-y-3">
+                  {DEMO_ACCOUNT_GROUPS.map((group) => (
+                    <div key={group.label}>
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#6b7280]">
+                        {group.label}
+                      </p>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {group.accounts.map((cred) => (
+                          <button
+                            key={cred.email}
+                            type="button"
+                            onClick={() => {
+                              setEmail(cred.email);
+                              setPassword(cred.pwd);
+                              setError("");
+                            }}
+                            className="p-3 rounded-xl border border-[#e5e7eb] bg-white hover:border-[#005656]/30 hover:bg-[#f0f7f7] transition-all text-left"
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <div
+                                className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
+                                style={{ background: cred.color }}
+                              >
+                                {cred.role[0]}
+                              </div>
+                              <span className="text-xs font-semibold text-[#323B42] truncate">{cred.role}</span>
+                            </div>
+                            <p className="text-[10px] text-[#9ca3af] truncate">{cred.email}</p>
+                            <p className="text-[10px] text-[#9ca3af] truncate">pw: {cred.pwd}</p>
+                          </button>
+                        ))}
                       </div>
-                      <p className="text-[10px] text-[#9ca3af] truncate">{cred.email}</p>
-                      <p className="text-[10px] text-[#9ca3af]">pw: {cred.pwd}</p>
-                    </button>
+                    </div>
                   ))}
                 </div>
               </div>
