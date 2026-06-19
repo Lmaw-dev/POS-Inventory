@@ -194,6 +194,7 @@ model Notification {
 model InventoryItem {
   id                 String              @id @default(uuid())
   name               String
+  description        String?
   itemType           InventoryItemType   @default(RETAIL_ITEM)
   sku                String?
   barcode            String?

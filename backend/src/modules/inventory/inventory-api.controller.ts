@@ -69,6 +69,25 @@ export class InventoryApiController {
     return this.inventoryApiService.listRecipes(request.headers, query);
   }
 
+  @Post('recipes')
+  createRecipe(@Req() request: RequestLike, @Body() body: Record<string, unknown>) {
+    return this.inventoryApiService.createRecipe(request.headers, body);
+  }
+
+  @Patch('recipes/:id')
+  updateRecipe(
+    @Req() request: RequestLike,
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.inventoryApiService.updateRecipe(request.headers, id, body);
+  }
+
+  @Delete('recipes/:id')
+  deleteRecipe(@Req() request: RequestLike, @Param('id') id: string) {
+    return this.inventoryApiService.deleteRecipe(request.headers, id);
+  }
+
   @Get('kitchen-orders')
   listKitchenOrders(@Req() request: RequestLike, @Query() query: Record<string, string | undefined>) {
     return this.inventoryApiService.listKitchenOrders(request.headers, query);

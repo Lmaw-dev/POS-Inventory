@@ -3,8 +3,15 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
+const { json, urlencoded } = require('express') as {
+  json: (options: { limit: string }) => unknown;
+  urlencoded: (options: { extended: boolean; limit: string }) => unknown;
+};
+
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  app.use(json({ limit: '5mb' }));
+  app.use(urlencoded({ extended: true, limit: '5mb' }));
   app.enableShutdownHooks();
 
   app.enableCors({

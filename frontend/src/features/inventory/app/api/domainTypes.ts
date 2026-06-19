@@ -34,6 +34,7 @@ export interface ApiUser extends ApiActor {
 export interface ApiInventoryItem {
   id: string;
   name: string;
+  description?: string | null;
   itemType: 'RETAIL_ITEM' | 'INGREDIENT' | 'MENU_ITEM' | 'SUPPLY' | 'BUNDLE';
   sku?: string | null;
   barcode?: string | null;

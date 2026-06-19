@@ -36,6 +36,8 @@ type RecipeModifier = {
 type Recipe = {
   id: string;
   name: string;
+  description: string;
+  imageUrl: string;
   category: string;
   servings: number;
   yieldPercentage: number;
@@ -104,6 +106,8 @@ export function RecipeBOM() {
 
   const [newRecipe, setNewRecipe] = useState({
     name: "",
+    description: "",
+    imageUrl: "",
     category: "",
     servings: "",
     yieldPercentage: "100",
@@ -360,6 +364,8 @@ export function RecipeBOM() {
     const recipeToAdd: Recipe = {
       id: editingRecipe?.id || `RCP-${String(recipes.length + 1).padStart(3, '0')}`,
       name: newRecipe.name,
+      description: newRecipe.description,
+      imageUrl: newRecipe.imageUrl,
       category: newRecipe.category,
       servings: servings,
       yieldPercentage,
@@ -382,6 +388,8 @@ export function RecipeBOM() {
         id: editingRecipe?.id,
         data: {
           name: recipeToAdd.name,
+          description: recipeToAdd.description,
+          imageUrl: recipeToAdd.imageUrl,
           category: recipeToAdd.category,
           servings: recipeToAdd.servings,
           yieldPercentage: recipeToAdd.yieldPercentage,
@@ -421,6 +429,8 @@ export function RecipeBOM() {
       setEditingRecipe(null);
       setNewRecipe({
       name: "",
+      description: "",
+      imageUrl: "",
       category: "",
       servings: "",
       yieldPercentage: "100",
@@ -454,6 +464,8 @@ export function RecipeBOM() {
     setEditingRecipe(recipe);
     setNewRecipe({
       name: recipe.name,
+      description: recipe.description,
+      imageUrl: recipe.imageUrl,
       category: recipe.category,
       servings: recipe.servings.toString(),
       yieldPercentage: recipe.yieldPercentage.toString(),
@@ -553,6 +565,8 @@ export function RecipeBOM() {
     });
     setNewRecipe({
       name: "",
+      description: "",
+      imageUrl: "",
       category: "",
       servings: "",
       yieldPercentage: "100",
@@ -645,15 +659,21 @@ export function RecipeBOM() {
           <div key={recipe.id} className="bg-card rounded-2xl p-6 shadow-sm border border-border hover:shadow-md transition-all duration-200">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center">
-                  <ChefHat className="w-6 h-6 text-white" />
-                </div>
+                {recipe.imageUrl ? (
+                  <img src={recipe.imageUrl} alt={recipe.name} className="h-12 w-12 rounded-xl object-cover" />
+                ) : (
+                  <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center">
+                    <ChefHat className="w-6 h-6 text-white" />
+                  </div>
+                )}
                 <div>
                   <h3 className="font-bold text-foreground">{recipe.name}</h3>
                   <p className="text-xs text-muted-foreground">{recipe.id}</p>
                 </div>
               </div>
             </div>
+
+            {recipe.description && <p className="mb-4 text-sm text-muted-foreground line-clamp-2">{recipe.description}</p>}
 
             <div className="space-y-3 mb-4">
               <div className="flex items-center justify-between text-sm">
@@ -815,6 +835,45 @@ export function RecipeBOM() {
                     <option value="Dessert">Dessert</option>
                     <option value="Beverage">Beverage</option>
                   </select>
+                </div>
+
+                <div className="col-span-2">
+                  <label htmlFor="description" className="block text-sm mb-2 text-foreground font-medium">Menu Description</label>
+                  <textarea
+                    id="description"
+                    name="description"
+                    value={newRecipe.description}
+                    onChange={handleInputChange}
+                    rows={3}
+                    placeholder="Describe this dish for customers and staff..."
+                    className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+                  />
+                </div>
+
+                <div className="col-span-2">
+                  <label htmlFor="imageUrl" className="block text-sm mb-2 text-foreground font-medium">Recipe Picture</label>
+                  <input
+                    id="imageUrl"
+                    name="imageUrl"
+                    type="url"
+                    value={newRecipe.imageUrl}
+                    onChange={handleInputChange}
+                    placeholder="https://example.com/dish.jpg"
+                    className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = () => setNewRecipe(current => ({ ...current, imageUrl: String(reader.result ?? '') }));
+                      reader.readAsDataURL(file);
+                    }}
+                    className="mt-2 block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-2 file:text-primary"
+                  />
+                  {newRecipe.imageUrl && <img src={newRecipe.imageUrl} alt="Recipe preview" className="mt-3 h-40 w-full rounded-xl border border-border object-cover" />}
                 </div>
 
                 <div>
@@ -1199,6 +1258,8 @@ export function RecipeBOM() {
             </div>
 
             <div className="p-6 space-y-6">
+              {selectedRecipe.imageUrl && <img src={selectedRecipe.imageUrl} alt={selectedRecipe.name} className="h-56 w-full rounded-xl object-cover" />}
+              {selectedRecipe.description && <p className="text-sm text-muted-foreground">{selectedRecipe.description}</p>}
               {/* Scale Controls */}
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-3">

@@ -22,6 +22,8 @@ const conditionBadgeClass = (condition: string) => {
 
 const blankNewItem = () => ({
   name: '',
+  description: '',
+  imageUrl: '',
   sku: '',
   category: '',
   subcategory: '',
@@ -63,6 +65,8 @@ export default function ProductManagementView({
     setShowDeleteConfirm(false);
     setForm({
       name: item.name ?? '',
+      description: item.description ?? '',
+      imageUrl: item.imageUrl ?? '',
       sku: item.sku ?? '',
       category: item.category ?? '',
       subcategory: item.subcategory ?? '',
@@ -85,6 +89,8 @@ export default function ProductManagementView({
         id: selectedItem.id,
         data: {
           name: form.name.trim(),
+          description: form.description?.trim() || null,
+          imageUrl: form.imageUrl?.trim() || null,
           sku: form.sku?.trim() || undefined,
           category: form.category,
           subcategory: form.subcategory,
@@ -129,6 +135,8 @@ export default function ProductManagementView({
       await saveInventoryMutation.mutateAsync({
         data: {
           name: newItemForm.name.trim(),
+          description: newItemForm.description.trim() || null,
+          imageUrl: newItemForm.imageUrl.trim() || null,
           sku: newItemForm.sku?.trim() || undefined,
           itemType: 'RETAIL_ITEM',
           category: newItemForm.category,
@@ -292,6 +300,16 @@ export default function ProductManagementView({
                   <label className="block text-[12px] font-medium text-foreground mb-1">Item Name *</label>
                   <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary" />
                 </div>
+                <div className="col-span-2">
+                  <label className="block text-[12px] font-medium text-foreground mb-1">Menu Description</label>
+                  <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} placeholder="Describe the product shown in the retail menu" className="w-full px-3 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary resize-none" />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-[12px] font-medium text-foreground mb-1">Product Picture</label>
+                  <input type="url" value={form.imageUrl} onChange={e => setForm({ ...form, imageUrl: e.target.value })} placeholder="https://example.com/product.jpg" className="w-full px-3 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary" />
+                  <input type="file" accept="image/*" onChange={e => { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => setForm((current: any) => ({ ...current, imageUrl: String(reader.result ?? '') })); reader.readAsDataURL(file); }} className="mt-2 block w-full text-[12px] text-muted-foreground file:mr-2 file:rounded-[6px] file:border-0 file:bg-secondary/10 file:px-3 file:py-2 file:text-secondary" />
+                  {form.imageUrl && <img src={form.imageUrl} alt="Product preview" className="mt-3 h-40 w-full rounded-[8px] border border-border object-cover" />}
+                </div>
                 <div>
                   <label className="block text-[12px] font-medium text-foreground mb-1">SKU</label>
                   <input value={form.sku} onChange={e => setForm({ ...form, sku: e.target.value })} placeholder="Optional" className="w-full px-3 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary" />
@@ -390,6 +408,16 @@ export default function ProductManagementView({
               <div>
                 <label className="block text-[12px] font-medium text-foreground mb-1">Item Name *</label>
                 <input value={newItemForm.name} onChange={e => setNewItemForm({ ...newItemForm, name: e.target.value })} placeholder="e.g., Vintage Denim Jacket" className="w-full px-3 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary" />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium text-foreground mb-1">Menu Description</label>
+                <textarea value={newItemForm.description} onChange={e => setNewItemForm({ ...newItemForm, description: e.target.value })} rows={3} placeholder="Describe this product" className="w-full px-3 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary resize-none" />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium text-foreground mb-1">Product Picture</label>
+                <input type="url" value={newItemForm.imageUrl} onChange={e => setNewItemForm({ ...newItemForm, imageUrl: e.target.value })} placeholder="https://example.com/product.jpg" className="w-full px-3 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary" />
+                <input type="file" accept="image/*" onChange={e => { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => setNewItemForm(current => ({ ...current, imageUrl: String(reader.result ?? '') })); reader.readAsDataURL(file); }} className="mt-2 block w-full text-[12px] text-muted-foreground file:mr-2 file:rounded-[6px] file:border-0 file:bg-secondary/10 file:px-3 file:py-2 file:text-secondary" />
+                {newItemForm.imageUrl && <img src={newItemForm.imageUrl} alt="Product preview" className="mt-2 h-36 w-full rounded-[8px] border border-border object-cover" />}
               </div>
               <div>
                 <label className="block text-[12px] font-medium text-foreground mb-1">SKU (optional)</label>

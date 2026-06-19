@@ -41,6 +41,7 @@ interface RetailProduct {
   variantId: number;
   code: string;
   name: string;
+  description?: string;
   category: string;
   categoryName?: string;
   size?: string;
@@ -350,6 +351,7 @@ export function RetailCreateOrder({ currentUser, onNavigate, onOrderCreated, onL
           variantId: Number(product.variant_id),
           code: product.barcode || product.sku || String(product.variant_id || product.id),
           name: product.name,
+          description: product.description ?? '',
           category: product.category_name ?? 'Uncategorized',
           categoryName: product.category_name ?? null,
           size: product.size ?? undefined,
@@ -820,6 +822,7 @@ export function RetailCreateOrder({ currentUser, onNavigate, onOrderCreated, onL
                       />
                     </div>
                     <h3 className="text-xs text-center mb-1">{product.name}</h3>
+                    {product.description && <p className="text-[10px] text-muted-foreground text-center line-clamp-2 mb-1">{product.description}</p>}
                     <p className="text-xs text-center text-primary">₱ {product.price.toFixed(2)}</p>
                   </button>
                 ))}
@@ -865,6 +868,7 @@ export function RetailCreateOrder({ currentUser, onNavigate, onOrderCreated, onL
                   </div>
                 </div>
                 <h3 className="text-xs font-medium mb-0.5 line-clamp-1">{product.name}</h3>
+                {product.description && <p className="text-[10px] text-muted-foreground line-clamp-2 mb-1">{product.description}</p>}
                 <div className="flex gap-1 mb-1 flex-wrap">
                   {product.sizes.length > 0 && (
                     <span className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">
