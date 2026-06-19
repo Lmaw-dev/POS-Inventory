@@ -10,10 +10,10 @@ async function bootstrap() {
   app.enableCors({
     origin:
       process.env.CORS_ORIGIN?.split(',').map((value) => value.trim()) ?? [
-        'http://localhost:5173',
-        'http://127.0.0.1:5173',
-        'http://localhost:5174',
-        'http://127.0.0.1:5174',
+        // Vite automatically tries the next port when 5173 is occupied.
+        // Accept every loopback dev port so login does not break on 5174+.
+        /^http:\/\/localhost:\d+$/,
+        /^http:\/\/127\.0\.0\.1:\d+$/,
       ],
     credentials: true,
   });
