@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { LoginPage } from '../auth/pages/LoginPage';
 import { AdminDashboard } from './components/AdminDashboard';
 import { SuperadminDashboard } from '../superadmin/pages/SuperadminDashboard';
@@ -26,6 +27,7 @@ import { getApiBaseUrl } from '../auth/services/auth';
 import type { AuthenticatedUser } from '../auth/types/auth';
 import { getDefaultStoreLogo } from './utils/defaultStoreLogo';
 import { AppAlertProvider } from './components/AppAlertProvider';
+import { appQueryClient } from '../query/appQueryClient';
 
 const SESSION_USER_KEY = 'bukolabs-pos-current-user';
 const SESSION_PAGE_KEY = 'bukolabs-pos-current-page';
@@ -202,11 +204,12 @@ export default function App() {
   };
 
   return (
-    <div className="size-full bg-background">
-      <StoreSettingsProvider currentUser={currentUser}>
-        <AppAlertProvider>
-          <OrderProvider currentUser={currentUser}>
-            <TableProvider>
+    <QueryClientProvider client={appQueryClient}>
+      <div className="size-full bg-background">
+        <StoreSettingsProvider currentUser={currentUser}>
+          <AppAlertProvider>
+            <OrderProvider currentUser={currentUser}>
+              <TableProvider>
           {currentPage === 'login' && (
             <LoginPage onLogin={handleLogin} />
           )}
@@ -326,11 +329,12 @@ export default function App() {
               <InventoryModulePage currentPage={currentPage} currentUser={currentUser} />
             </div>
           )}
-            </TableProvider>
-          </OrderProvider>
-        </AppAlertProvider>
-      </StoreSettingsProvider>
-    </div>
+              </TableProvider>
+            </OrderProvider>
+          </AppAlertProvider>
+        </StoreSettingsProvider>
+      </div>
+    </QueryClientProvider>
   );
 }
 

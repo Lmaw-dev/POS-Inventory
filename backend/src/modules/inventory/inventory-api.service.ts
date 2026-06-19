@@ -427,12 +427,12 @@ export class InventoryApiService {
 
       const storeResult = await client.query<{ id: number; store_type: string }>(
         `
-          SELECT DISTINCT s.id, CASE WHEN s.store_type = 'RETAIL' THEN 'RETAIL_STORE' ELSE s.store_type END AS store_type
+          SELECT s.id, CASE WHEN s.store_type = 'RETAIL' THEN 'RETAIL_STORE' ELSE s.store_type END AS store_type
           FROM stores s
           LEFT JOIN users pu ON pu.store_id = s.id
           LEFT JOIN "User" iu ON lower(iu.email) = lower(pu.email)
           WHERE iu."businessId" = $1
-             OR (iu.id IS NULL AND s.store_type = CASE WHEN $2 = 'RETAIL_ITEM' THEN 'RETAIL_STORE' ELSE 'RESTAURANT' END)
+             OR (iu.id IS NULL AND s.store_type = CASE WHEN $2::text = 'RETAIL_ITEM' THEN 'RETAIL' ELSE 'RESTAURANT' END)
           ORDER BY CASE WHEN iu."businessId" = $1 THEN 0 ELSE 1 END, s.id
           LIMIT 1
         `,
@@ -444,16 +444,16 @@ export class InventoryApiService {
       const categoryResult = await client.query<{ id: number }>(
         `
           INSERT INTO product_categories (store_id, store_type, name)
-          SELECT $1, $2, $3
+          SELECT $1, $2::varchar, $3::varchar
           WHERE NOT EXISTS (
-            SELECT 1 FROM product_categories WHERE store_id = $1 AND store_type = $2 AND lower(name) = lower($3)
+            SELECT 1 FROM product_categories WHERE store_id = $1 AND store_type = $2::varchar AND lower(name) = lower($3::text)
           )
           RETURNING id
         `,
         [store.id, store.store_type, item.category],
       );
       const existingCategory = categoryResult.rows[0] ?? (await client.query<{ id: number }>(
-        `SELECT id FROM product_categories WHERE store_id = $1 AND store_type = $2 AND lower(name) = lower($3) LIMIT 1`,
+        `SELECT id FROM product_categories WHERE store_id = $1 AND store_type = $2::varchar AND lower(name) = lower($3::text) LIMIT 1`,
         [store.id, store.store_type, item.category],
       )).rows[0];
 
@@ -472,7 +472,7 @@ export class InventoryApiService {
           RETURNING id
         `,
         [store.id, existingCategory?.id ?? null, store.store_type, item.name, item.description, item.price,
-          item.imageUrl, item.sku, item.barcode, item.unit, item.size, item.quantity, item.minStock,
+          item.imageUrl, item.sku, item.barcode, item.unit, item.size, Math.floor(Number(item.quantity ?? 0)), Math.floor(Number(item.minStock ?? 0)),
           isAvailable, item.id],
       );
       const productId = productResult.rows[0].id;
@@ -490,7 +490,7 @@ export class InventoryApiService {
               stock_quantity = EXCLUDED.stock_quantity, low_stock_limit = EXCLUDED.low_stock_limit,
               is_active = EXCLUDED.is_active, updated_at = CURRENT_TIMESTAMP
           `,
-          [productId, item.size, item.sku, item.barcode, item.imageUrl, item.price, item.quantity, item.minStock, isAvailable, item.id],
+          [productId, item.size, item.sku, item.barcode, item.imageUrl, item.price, Math.floor(Number(item.quantity ?? 0)), Math.floor(Number(item.minStock ?? 0)), isAvailable, item.id],
         );
       } else if (recipeId) {
         await client.query(`DELETE FROM product_ingredients WHERE product_id = $1`, [productId]);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type CSSProperties } from 'react';
+import { useState, useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { Sidebar } from '../../shared/components/Sidebar';
 import { Page, type StoreBrand } from '../../shared/App';
 import type { StaffType, StoreType } from '../../auth/types/auth';
@@ -11,10 +11,7 @@ import { DeleteConfirmDialog } from '../../shared/components/DeleteConfirmDialog
 import { getApiBaseUrl } from '../../auth/services/auth';
 import type { AuthenticatedUser } from '../../auth/types/auth';
 import { getLocalDateKey } from '../../shared/utils/date';
-import wagyuSteakImg from '../../imports/image-4.png';
-import trufflePastaImg from '../../imports/image-5.png';
-import lobsterThermidorImg from '../../imports/image-6.png';
-import freshLemonadeImg from '../../imports/image-7.png';
+import { useCompletePaymentMutation, usePosMenuQuery } from '../../features/pos/hooks/usePosMenuQuery';
 
 interface CreateOrderProps {
   currentUser: AuthenticatedUser | null;
@@ -67,181 +64,6 @@ interface CartItem {
   ingredients: Ingredient[];
   originalIngredients: Ingredient[];
 }
-
-const menuCategories = [
-  { id: 'all', name: 'All' },
-  { id: 'snacks', name: 'Snacks' },
-  { id: 'meal', name: 'Meal' },
-  { id: 'beverages', name: 'Beverages' },
-  { id: 'dessert', name: 'Dessert' },
-];
-
-const products = [
-  {
-    id: 1,
-    name: 'Wagyu Steak',
-    description: 'Premium Japanese beef, grilled to perfection',
-    price: 250,
-    category: 'meal',
-    image: wagyuSteakImg,
-    ingredients: [
-      { name: 'Wagyu Beef', quantity: 200, unit: 'g' },
-      { name: 'Salt', quantity: 5, unit: 'g' },
-      { name: 'Pepper', quantity: 3, unit: 'g' },
-      { name: 'Butter', quantity: 20, unit: 'g' },
-      { name: 'Garlic', quantity: 10, unit: 'g' }
-    ]
-  },
-  {
-    id: 2,
-    name: 'Truffle Pasta',
-    description: 'Creamy pasta with aromatic truffle oil',
-    price: 180,
-    category: 'meal',
-    image: trufflePastaImg,
-    ingredients: [
-      { name: 'Pasta', quantity: 150, unit: 'g' },
-      { name: 'Truffle Oil', quantity: 15, unit: 'ml' },
-      { name: 'Parmesan', quantity: 30, unit: 'g' },
-      { name: 'Cream', quantity: 50, unit: 'ml' },
-      { name: 'Mushrooms', quantity: 40, unit: 'g' }
-    ]
-  },
-  {
-    id: 3,
-    name: 'Grilled Salmon',
-    description: 'Fresh Atlantic salmon with herbs and lemon',
-    price: 220,
-    category: 'meal',
-    image: 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=200&h=200&fit=crop',
-    ingredients: [
-      { name: 'Salmon Fillet', quantity: 180, unit: 'g' },
-      { name: 'Lemon', quantity: 20, unit: 'g' },
-      { name: 'Olive Oil', quantity: 10, unit: 'ml' },
-      { name: 'Herbs', quantity: 5, unit: 'g' },
-      { name: 'Salt', quantity: 3, unit: 'g' }
-    ]
-  },
-  {
-    id: 4,
-    name: 'Lobster Thermidor',
-    description: 'Classic French lobster in creamy sauce',
-    price: 350,
-    category: 'meal',
-    image: lobsterThermidorImg,
-    ingredients: [
-      { name: 'Lobster', quantity: 300, unit: 'g' },
-      { name: 'Cream', quantity: 60, unit: 'ml' },
-      { name: 'Cheese', quantity: 40, unit: 'g' },
-      { name: 'Butter', quantity: 25, unit: 'g' },
-      { name: 'Brandy', quantity: 30, unit: 'ml' }
-    ]
-  },
-  {
-    id: 5,
-    name: 'Beef Wellington',
-    description: 'Tender beef wrapped in flaky pastry',
-    price: 380,
-    category: 'meal',
-    image: 'https://images.unsplash.com/photo-1588168333986-5078d3ae3976?w=200&h=200&fit=crop',
-    ingredients: [
-      { name: 'Beef Tenderloin', quantity: 250, unit: 'g' },
-      { name: 'Puff Pastry', quantity: 100, unit: 'g' },
-      { name: 'Mushrooms', quantity: 60, unit: 'g' },
-      { name: 'Pate', quantity: 40, unit: 'g' },
-      { name: 'Egg Wash', quantity: 1, unit: 'pc' }
-    ]
-  },
-  {
-    id: 6,
-    name: 'Burger Deluxe',
-    description: 'Juicy beef patty with fresh toppings',
-    price: 150,
-    category: 'snacks',
-    image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=200&h=200&fit=crop',
-    ingredients: [
-      { name: 'Beef Patty', quantity: 150, unit: 'g' },
-      { name: 'Burger Bun', quantity: 1, unit: 'pc' },
-      { name: 'Cheese', quantity: 30, unit: 'g' },
-      { name: 'Lettuce', quantity: 20, unit: 'g' },
-      { name: 'Tomato', quantity: 30, unit: 'g' },
-      { name: 'Onions', quantity: 15, unit: 'g' },
-      { name: 'Sauce', quantity: 25, unit: 'ml' }
-    ]
-  },
-  {
-    id: 7,
-    name: 'Spring Rolls',
-    description: 'Crispy rolls filled with vegetables and pork',
-    price: 80,
-    category: 'snacks',
-    image: 'https://images.unsplash.com/photo-1534674343483-e7df7f1c69c3?w=200&h=200&fit=crop',
-    ingredients: [
-      { name: 'Spring Roll Wrapper', quantity: 3, unit: 'pcs' },
-      { name: 'Vegetables', quantity: 80, unit: 'g' },
-      { name: 'Ground Pork', quantity: 50, unit: 'g' },
-      { name: 'Soy Sauce', quantity: 10, unit: 'ml' }
-    ]
-  },
-  {
-    id: 8,
-    name: 'Fresh Lemonade',
-    description: 'Refreshing homemade lemonade',
-    price: 80,
-    category: 'beverages',
-    image: freshLemonadeImg,
-    ingredients: [
-      { name: 'Lemon Juice', quantity: 60, unit: 'ml' },
-      { name: 'Water', quantity: 200, unit: 'ml' },
-      { name: 'Sugar', quantity: 30, unit: 'g' },
-      { name: 'Ice', quantity: 100, unit: 'g' }
-    ]
-  },
-  {
-    id: 9,
-    name: 'Iced Coffee',
-    description: 'Cold brewed coffee with milk',
-    price: 95,
-    category: 'beverages',
-    image: 'https://images.unsplash.com/photo-1517487881594-2787fef5ebf7?w=200&h=200&fit=crop',
-    ingredients: [
-      { name: 'Coffee', quantity: 60, unit: 'ml' },
-      { name: 'Milk', quantity: 100, unit: 'ml' },
-      { name: 'Sugar', quantity: 15, unit: 'g' },
-      { name: 'Ice', quantity: 120, unit: 'g' }
-    ]
-  },
-  {
-    id: 10,
-    name: 'Tiramisu',
-    description: 'Classic Italian coffee-flavored dessert',
-    price: 120,
-    category: 'dessert',
-    image: 'https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?w=200&h=200&fit=crop',
-    ingredients: [
-      { name: 'Ladyfingers', quantity: 80, unit: 'g' },
-      { name: 'Mascarpone', quantity: 100, unit: 'g' },
-      { name: 'Coffee', quantity: 50, unit: 'ml' },
-      { name: 'Cocoa Powder', quantity: 10, unit: 'g' },
-      { name: 'Sugar', quantity: 30, unit: 'g' }
-    ]
-  },
-  {
-    id: 11,
-    name: 'Cheesecake',
-    description: 'Rich and creamy New York-style cheesecake',
-    price: 110,
-    category: 'dessert',
-    image: 'https://images.unsplash.com/photo-1533134242443-d4fd215305ad?w=200&h=200&fit=crop',
-    ingredients: [
-      { name: 'Cream Cheese', quantity: 120, unit: 'g' },
-      { name: 'Graham Crust', quantity: 60, unit: 'g' },
-      { name: 'Sugar', quantity: 40, unit: 'g' },
-      { name: 'Eggs', quantity: 2, unit: 'pcs' },
-      { name: 'Vanilla', quantity: 5, unit: 'ml' }
-    ]
-  },
-];
 
 // Customer history is now derived from actual orders
 
@@ -301,6 +123,8 @@ export function CreateOrder({ currentUser, onNavigate, onOrderCreated, onLogout,
   const { addOrder, orders, queuedOrders } = useOrders();
   const { tables } = useTables();
   const { settings, discounts } = useStoreSettings();
+  const posMenuQuery = usePosMenuQuery(currentUser?.id);
+  const completePaymentMutation = useCompletePaymentMutation();
   const tableManagementEnabled = settings.enable_table_management;
   const customerRecommendationEnabled = settings.enable_customer_recommendation;
   const discountEnabled = settings.enable_discount;
@@ -309,8 +133,6 @@ export function CreateOrder({ currentUser, onNavigate, onOrderCreated, onLogout,
   const [currentOrderNumber, setCurrentOrderNumber] = useState<string>('');
   const [customerName, setCustomerName] = useState('');
   const [hasHistory, setHasHistory] = useState(false);
-  const [posProducts, setPosProducts] = useState<MenuProduct[]>([]);
-  const [dynamicMenuCategories, setDynamicMenuCategories] = useState([{ id: 'all', name: 'All' }]);
   const [recommendedProducts, setRecommendedProducts] = useState<MenuProduct[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -346,6 +168,36 @@ export function CreateOrder({ currentUser, onNavigate, onOrderCreated, onLogout,
   const [isInQueue, setIsInQueue] = useState(false);
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
   const enabledPaymentMethods = settings.enabled_payment_methods.length > 0 ? settings.enabled_payment_methods : ['Cash'];
+  const posProducts = useMemo<MenuProduct[]>(() => {
+    return (posMenuQuery.data ?? []).map((product: any) => ({
+      id: Number(product.id),
+      name: product.name,
+      description: product.description ?? '',
+      price: Number(product.price ?? 0),
+      category: product.category_name ?? 'Uncategorized',
+      categoryName: product.category_name ?? null,
+      image: product.image_url || storeBrand?.logo || '',
+      availableQuantity: Number(product.available_quantity ?? 0),
+      ingredients: (product.ingredients ?? []).map((ingredient: any) => ({
+        id: Number(ingredient.id),
+        product_ingredient_id: Number(ingredient.id),
+        ingredient_id: Number(ingredient.ingredient_id),
+        name: ingredient.name,
+        quantity: Number(ingredient.quantity ?? 0),
+        original_quantity: Number(ingredient.quantity ?? 0),
+        unit: ingredient.unit,
+        is_removable: ingredient.is_removable,
+        alternatives: ingredient.alternatives ?? [],
+      })),
+    }));
+  }, [posMenuQuery.data, storeBrand?.logo]);
+  const dynamicMenuCategories = useMemo(
+    () => [
+      { id: 'all', name: 'All' },
+      ...Array.from(new Set(posProducts.map((product) => product.category))).map((category) => ({ id: category, name: category })),
+    ],
+    [posProducts],
+  );
 
   useEffect(() => {
     const highestOrderNumber = orders.reduce((highest, order) => {
@@ -382,51 +234,6 @@ export function CreateOrder({ currentUser, onNavigate, onOrderCreated, onLogout,
   const [customerSuggestions, setCustomerSuggestions] = useState<string[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const customerInputRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const loadProducts = async () => {
-      if (!currentUser?.id) return;
-
-      try {
-        const response = await fetch(`${getApiBaseUrl()}/admin/pos/products?user_id=${currentUser.id}`);
-        const data = await response.json();
-        if (!response.ok || !Array.isArray(data)) return;
-
-        const mappedProducts: MenuProduct[] = data.map((product: any) => ({
-          id: Number(product.id),
-          name: product.name,
-          description: product.description ?? '',
-          price: Number(product.price ?? 0),
-          category: product.category_name ?? 'Uncategorized',
-          categoryName: product.category_name ?? null,
-          image: product.image_url || storeBrand?.logo || '',
-          availableQuantity: Number(product.available_quantity ?? 0),
-          ingredients: (product.ingredients ?? []).map((ingredient: any) => ({
-            id: Number(ingredient.id),
-            product_ingredient_id: Number(ingredient.id),
-            ingredient_id: Number(ingredient.ingredient_id),
-            name: ingredient.name,
-            quantity: Number(ingredient.quantity ?? 0),
-            original_quantity: Number(ingredient.quantity ?? 0),
-            unit: ingredient.unit,
-            is_removable: ingredient.is_removable,
-            alternatives: ingredient.alternatives ?? [],
-          })),
-        }));
-
-        setPosProducts(mappedProducts);
-        setDynamicMenuCategories([
-          { id: 'all', name: 'All' },
-          ...Array.from(new Set(mappedProducts.map((product) => product.category))).map((category) => ({ id: category, name: category })),
-        ]);
-      } catch {
-        setPosProducts([]);
-        setDynamicMenuCategories([{ id: 'all', name: 'All' }]);
-      }
-    };
-
-    void loadProducts();
-  }, [currentUser?.id]);
 
   // Autocomplete: Get unique customer names and filter based on input
   useEffect(() => {
@@ -765,47 +572,37 @@ export function CreateOrder({ currentUser, onNavigate, onOrderCreated, onLogout,
   ) => {
     if (!currentUser?.id) return null;
 
-    const response = await fetch(`${getApiBaseUrl()}/admin/pos/orders`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id: currentUser.id,
-        orderNumber: orderDetails.orderNumber,
-        customerName: orderDetails.customerName || null,
-        orderType: getOrderTypeForPayload(orderDetails.items),
-        tableName: orderDetails.tableNumber
-          ? `Table ${orderDetails.tableNumber}`
-          : Array.isArray(orderDetails.tableNumbers) && orderDetails.tableNumbers.length > 0
-          ? orderDetails.tableNumbers.map((tableNumber: number) => `Table ${tableNumber}`).join(' + ')
-          : orderDetails.isQueued
-          ? `Queue #${orderDetails.queuePosition || 1}`
-          : null,
-        partySize: orderDetails.partySize ?? null,
-        subtotal: orderDetails.subtotal,
-        discount: orderDetails.discount,
-        discountType: orderDetails.discountType ?? null,
-        serviceFee: orderDetails.serviceFee,
-        tax: orderDetails.tax,
-        total: orderDetails.total,
-        orderStatus: paid && !orderDetails.isQueued
-          ? (orderDetails.tableNumber || (Array.isArray(orderDetails.tableNumbers) && orderDetails.tableNumbers.length > 0) ? 'SERVED' : 'COMPLETED')
-          : 'PENDING',
-        paymentStatus: paid ? 'PAID' : 'NOT_PAID',
-        items: orderDetails.items.map(serializeItemForOrder),
-        payment: paid && payment ? {
-          paymentNumber: `PAY-${orderDetails.orderNumber}`,
-          method: payment.method,
-          amountPaid: payment.amountPaid,
-          changeAmount: payment.changeAmount,
-        } : undefined,
-      }),
+    return completePaymentMutation.mutateAsync({
+      user_id: currentUser.id,
+      orderNumber: orderDetails.orderNumber,
+      customerName: orderDetails.customerName || null,
+      orderType: getOrderTypeForPayload(orderDetails.items),
+      tableName: orderDetails.tableNumber
+        ? `Table ${orderDetails.tableNumber}`
+        : Array.isArray(orderDetails.tableNumbers) && orderDetails.tableNumbers.length > 0
+        ? orderDetails.tableNumbers.map((tableNumber: number) => `Table ${tableNumber}`).join(' + ')
+        : orderDetails.isQueued
+        ? `Queue #${orderDetails.queuePosition || 1}`
+        : null,
+      partySize: orderDetails.partySize ?? null,
+      subtotal: orderDetails.subtotal,
+      discount: orderDetails.discount,
+      discountType: orderDetails.discountType ?? null,
+      serviceFee: orderDetails.serviceFee,
+      tax: orderDetails.tax,
+      total: orderDetails.total,
+      orderStatus: paid && !orderDetails.isQueued
+        ? (orderDetails.tableNumber || (Array.isArray(orderDetails.tableNumbers) && orderDetails.tableNumbers.length > 0) ? 'SERVED' : 'COMPLETED')
+        : 'PENDING',
+      paymentStatus: paid ? 'PAID' : 'NOT_PAID',
+      items: orderDetails.items.map(serializeItemForOrder),
+      payment: paid && payment ? {
+        paymentNumber: `PAY-${orderDetails.orderNumber}`,
+        method: payment.method,
+        amountPaid: payment.amountPaid,
+        changeAmount: payment.changeAmount,
+      } : undefined,
     });
-
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data?.message ?? 'Unable to save order. Inventory may be insufficient.');
-    }
-    return data;
   };
 
   const validateOrder = (): boolean => {
@@ -1300,7 +1097,7 @@ export function CreateOrder({ currentUser, onNavigate, onOrderCreated, onLogout,
                   />
                 </div>
                 <h3 className="text-xs font-medium mb-0.5 line-clamp-1">{product.name}</h3>
-                <p className="text-xs text-muted-foreground mb-1 line-clamp-2">{product.description}</p>
+                {product.description && <p className="text-xs text-muted-foreground mb-1 line-clamp-2">{product.description}</p>}
                 <p className="text-xs text-primary font-medium">₱ {product.price.toFixed(2)}</p>
               </button>
             ))}
@@ -2039,7 +1836,7 @@ export function CreateOrder({ currentUser, onNavigate, onOrderCreated, onLogout,
                       />
                     </div>
                     <h3 className="text-xs font-medium mb-0.5 line-clamp-1">{product.name}</h3>
-                    <p className="text-xs text-muted-foreground mb-1 line-clamp-2">{product.description}</p>
+                    {product.description && <p className="text-xs text-muted-foreground mb-1 line-clamp-2">{product.description}</p>}
                     <p className="text-xs text-secondary font-medium">₱ {product.price.toFixed(2)}</p>
                   </button>
                 ))}
@@ -2909,4 +2706,3 @@ export function CreateOrder({ currentUser, onNavigate, onOrderCreated, onLogout,
     </div>
   );
 }
-

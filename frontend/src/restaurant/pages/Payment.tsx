@@ -29,7 +29,7 @@ export function Payment({ currentUser, onNavigate, currentOrder, onLogout, store
       if (paymentTiming === 'now' && currentUser?.id && currentOrder?.items?.length) {
         const total = currentOrder.total ?? currentOrder.subtotal ?? 0;
         const orderNumber = currentOrder.orderNumber ?? currentOrder.order_number ?? Date.now();
-        const response = await fetch(`${getApiBaseUrl()}/admin/pos/orders`, {
+        const response = await fetch(`${getApiBaseUrl()}/pos/orders`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

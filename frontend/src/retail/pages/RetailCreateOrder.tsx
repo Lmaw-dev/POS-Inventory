@@ -10,6 +10,7 @@ import { DeleteConfirmDialog } from '../../shared/components/DeleteConfirmDialog
 import { getApiBaseUrl } from '../../auth/services/auth';
 import type { AuthenticatedUser } from '../../auth/types/auth';
 import { getLocalDateKey } from '../../shared/utils/date';
+import { useCompletePaymentMutation, usePosMenuQuery } from '../../features/pos/hooks/usePosMenuQuery';
 
 interface RetailCreateOrderProps {
   currentUser: AuthenticatedUser | null;
@@ -60,224 +61,16 @@ interface RetailProductGroup extends RetailProduct {
   colors: string[];
 }
 
-const productCategories = [
-  { id: 'all', name: 'All Items' },
-  { id: 'shirts', name: 'Shirts' },
-  { id: 'pants', name: 'Pants' },
-  { id: 'dresses', name: 'Dresses' },
-  { id: 'jackets', name: 'Jackets' },
-  { id: 'shoes', name: 'Shoes' },
-  { id: 'bags', name: 'Bags' },
-  { id: 'accessories', name: 'Accessories' },
-];
-
-const products = [
-  {
-    id: 1,
-    code: 'UKY001',
-    name: 'Denim Jacket',
-    category: 'jackets',
-    size: 'L',
-    color: 'Blue',
-    price: 250,
-    image: 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=200&h=200&fit=crop',
-  },
-  {
-    id: 2,
-    code: 'UKY002',
-    name: 'Polo Shirt',
-    category: 'shirts',
-    size: 'M',
-    color: 'White',
-    price: 150,
-    image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=200&h=200&fit=crop',
-  },
-  {
-    id: 3,
-    code: 'UKY003',
-    name: 'Floral Dress',
-    category: 'dresses',
-    size: 'M',
-    color: 'Pink',
-    price: 350,
-    image: 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=200&h=200&fit=crop',
-  },
-  {
-    id: 4,
-    code: 'UKY004',
-    name: 'Chino Pants',
-    category: 'pants',
-    size: '32',
-    color: 'Khaki',
-    price: 200,
-    image: 'https://images.unsplash.com/photo-1473966968600-fa801b869a1a?w=200&h=200&fit=crop',
-  },
-  {
-    id: 5,
-    code: 'UKY005',
-    name: 'Leather Bag',
-    category: 'bags',
-    color: 'Brown',
-    price: 500,
-    image: 'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=200&h=200&fit=crop',
-  },
-  {
-    id: 6,
-    code: 'UKY006',
-    name: 'Sneakers',
-    category: 'shoes',
-    size: '9',
-    color: 'White',
-    price: 400,
-    image: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=200&h=200&fit=crop',
-  },
-  {
-    id: 7,
-    code: 'UKY007',
-    name: 'Cardigan',
-    category: 'jackets',
-    size: 'S',
-    color: 'Gray',
-    price: 280,
-    image: 'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=200&h=200&fit=crop',
-  },
-  {
-    id: 8,
-    code: 'UKY008',
-    name: 'Jeans',
-    category: 'pants',
-    size: '28',
-    color: 'Blue',
-    price: 320,
-    image: 'https://images.unsplash.com/photo-1542272604-787c3835535d?w=200&h=200&fit=crop',
-  },
-  {
-    id: 9,
-    code: 'UKY009',
-    name: 'Belt',
-    category: 'accessories',
-    color: 'Black',
-    price: 150,
-    image: 'https://images.unsplash.com/photo-1624222247344-550fb60583bb?w=200&h=200&fit=crop',
-  },
-  {
-    id: 10,
-    code: 'UKY010',
-    name: 'Cap',
-    category: 'accessories',
-    color: 'Red',
-    price: 120,
-    image: 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=200&h=200&fit=crop',
-  },
-  {
-    id: 11,
-    code: 'UKY011',
-    name: 'Scarf',
-    category: 'accessories',
-    color: 'Beige',
-    price: 50,
-    image: 'https://images.unsplash.com/photo-1601924994987-69e26d50dc26?w=200&h=200&fit=crop',
-  },
-  {
-    id: 12,
-    code: 'UKY012',
-    name: 'Vintage T-Shirt',
-    category: 'shirts',
-    size: 'L',
-    color: 'Black',
-    price: 100,
-    image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=200&h=200&fit=crop',
-  },
-  {
-    id: 13,
-    code: 'UKY013',
-    name: 'Summer Dress',
-    category: 'dresses',
-    size: 'S',
-    color: 'Yellow',
-    price: 280,
-    image: 'https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=200&h=200&fit=crop',
-  },
-  {
-    id: 14,
-    code: 'UKY014',
-    name: 'Canvas Shoes',
-    category: 'shoes',
-    size: '8',
-    color: 'Navy',
-    price: 250,
-    image: 'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?w=200&h=200&fit=crop',
-  },
-  {
-    id: 15,
-    code: 'UKY015',
-    name: 'Backpack',
-    category: 'bags',
-    color: 'Green',
-    price: 450,
-    image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=200&h=200&fit=crop',
-  },
-  {
-    id: 16,
-    code: 'UKY016',
-    name: 'Bomber Jacket',
-    category: 'jackets',
-    size: 'M',
-    color: 'Olive',
-    price: 400,
-    image: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=200&h=200&fit=crop',
-  },
-  {
-    id: 17,
-    code: 'UKY017',
-    name: 'Maxi Dress',
-    category: 'dresses',
-    size: 'L',
-    color: 'Red',
-    price: 380,
-    image: 'https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=200&h=200&fit=crop',
-  },
-  {
-    id: 18,
-    code: 'UKY018',
-    name: 'Shorts',
-    category: 'pants',
-    size: '30',
-    color: 'Black',
-    price: 180,
-    image: 'https://images.unsplash.com/photo-1591195853828-11db59a44f6b?w=200&h=200&fit=crop',
-  },
-  {
-    id: 19,
-    code: 'UKY019',
-    name: 'Running Shoes',
-    category: 'shoes',
-    size: '10',
-    color: 'Black/Red',
-    price: 550,
-    image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&h=200&fit=crop',
-  },
-  {
-    id: 20,
-    code: 'UKY020',
-    name: 'Tote Bag',
-    category: 'bags',
-    color: 'Cream',
-    price: 200,
-    image: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=200&h=200&fit=crop',
-  },
-];
-
 export function RetailCreateOrder({ currentUser, onNavigate, onOrderCreated, onLogout, storeBrand, userName, storeType = 'RETAIL_STORE', staffType }: RetailCreateOrderProps) {
   const { addOrder, orders, getCustomerHistory, getRecommendedProducts } = useOrders();
   const { settings, discounts } = useStoreSettings();
+  const posMenuQuery = usePosMenuQuery(currentUser?.id);
+  const completePaymentMutation = useCompletePaymentMutation();
   const enabledDiscounts = discounts.filter((discount) => discount.is_enabled);
   const transactionNumberRef = useRef(100001);
   const [currentTransactionNumber, setCurrentTransactionNumber] = useState<string>('');
   const [customerName, setCustomerName] = useState('');
   const [hasHistory, setHasHistory] = useState(false);
-  const [posProducts, setPosProducts] = useState<RetailProduct[]>([]);
-  const [dynamicProductCategories, setDynamicProductCategories] = useState([{ id: 'all', name: 'All Items' }]);
   const [recommendedProducts, setRecommendedProducts] = useState<RetailProduct[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedProductGroup, setSelectedProductGroup] = useState<RetailProductGroup | null>(null);
@@ -306,6 +99,29 @@ export function RetailCreateOrder({ currentUser, onNavigate, onOrderCreated, onL
 
   // Scan feedback
   const [scanFeedback, setScanFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const posProducts = useMemo<RetailProduct[]>(() => {
+    return (posMenuQuery.data ?? []).map((product: any) => ({
+      id: Number(product.id),
+      variantId: Number(product.variant_id),
+      code: product.barcode || product.sku || String(product.variant_id || product.id),
+      name: product.name,
+      description: product.description ?? '',
+      category: product.category_name ?? 'Uncategorized',
+      categoryName: product.category_name ?? null,
+      size: product.size ?? undefined,
+      color: product.color ?? undefined,
+      price: Number(product.price ?? 0),
+      image: product.image_url || storeBrand?.logo || '',
+      stockQuantity: Number(product.available_quantity ?? product.stock_quantity ?? 0),
+    }));
+  }, [posMenuQuery.data, storeBrand?.logo]);
+  const dynamicProductCategories = useMemo(
+    () => [
+      { id: 'all', name: 'All Items' },
+      ...Array.from(new Set(posProducts.map((product) => product.category))).map((category) => ({ id: category, name: category })),
+    ],
+    [posProducts],
+  );
 
   useEffect(() => {
     const highestOrderNumber = orders.reduce((highest, order) => {
@@ -335,44 +151,6 @@ export function RetailCreateOrder({ currentUser, onNavigate, onOrderCreated, onL
     };
 
     void loadNextOrderNumber();
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    const loadProducts = async () => {
-      if (!currentUser?.id) return;
-
-      try {
-        const response = await fetch(`${getApiBaseUrl()}/admin/pos/products?user_id=${currentUser.id}`);
-        const data = await response.json();
-        if (!response.ok || !Array.isArray(data)) return;
-
-        const mappedProducts: RetailProduct[] = data.map((product: any) => ({
-          id: Number(product.id),
-          variantId: Number(product.variant_id),
-          code: product.barcode || product.sku || String(product.variant_id || product.id),
-          name: product.name,
-          description: product.description ?? '',
-          category: product.category_name ?? 'Uncategorized',
-          categoryName: product.category_name ?? null,
-          size: product.size ?? undefined,
-          color: product.color ?? undefined,
-          price: Number(product.price ?? 0),
-          image: product.image_url || storeBrand?.logo || '',
-          stockQuantity: Number(product.available_quantity ?? product.stock_quantity ?? 0),
-        }));
-
-        setPosProducts(mappedProducts);
-        setDynamicProductCategories([
-          { id: 'all', name: 'All Items' },
-          ...Array.from(new Set(mappedProducts.map((product) => product.category))).map((category) => ({ id: category, name: category })),
-        ]);
-      } catch {
-        setPosProducts([]);
-        setDynamicProductCategories([{ id: 'all', name: 'All Items' }]);
-      }
-    };
-
-    void loadProducts();
   }, [currentUser?.id]);
 
   // Autocomplete logic
@@ -677,44 +455,34 @@ export function RetailCreateOrder({ currentUser, onNavigate, onOrderCreated, onL
 
     try {
       if (currentUser?.id) {
-        const response = await fetch(`${getApiBaseUrl()}/admin/pos/orders`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: currentUser.id,
-            orderNumber: `RET-${transactionNumber}`,
-            customerName: order.customer ?? null,
-            orderType: 'RETAIL',
-            subtotal,
-            discount,
-            discountType: order.discountType ?? null,
-            serviceFee,
-            tax,
-            total,
-            items: cart.map((item) => ({
-              productId: item.id,
-              variantId: item.variantId,
-              name: item.name,
-              categoryName: item.category,
-              size: item.size ?? null,
-              color: item.color ?? null,
-              quantity: item.quantity,
-              price: item.price,
-            })),
-            payment: {
-              paymentNumber: `PAY-${transactionNumber}`,
-              method: paymentMethod,
-              amountPaid: paymentMethod === 'Cash' ? parseFloat(cashAmount) : total,
-              changeAmount: paymentMethod === 'Cash' ? computedChange : 0,
-            },
-          }),
+        const data: any = await completePaymentMutation.mutateAsync({
+          user_id: currentUser.id,
+          orderNumber: `RET-${transactionNumber}`,
+          customerName: order.customer ?? null,
+          orderType: 'RETAIL',
+          subtotal,
+          discount,
+          discountType: order.discountType ?? null,
+          serviceFee,
+          tax,
+          total,
+          items: cart.map((item) => ({
+            productId: item.id,
+            variantId: item.variantId,
+            name: item.name,
+            categoryName: item.category,
+            size: item.size ?? null,
+            color: item.color ?? null,
+            quantity: item.quantity,
+            price: item.price,
+          })),
+          payment: {
+            paymentNumber: `PAY-${transactionNumber}`,
+            method: paymentMethod,
+            amountPaid: paymentMethod === 'Cash' ? parseFloat(cashAmount) : total,
+            changeAmount: paymentMethod === 'Cash' ? computedChange : 0,
+          },
         });
-
-        const data = await response.json();
-        if (!response.ok) {
-          alert(data?.message ?? 'Unable to complete payment. Stock may be insufficient.');
-          return;
-        }
 
         order.transactionNumber = data?.order_number ?? order.transactionNumber;
         const savedOrderNumber = Number(String(order.transactionNumber).match(/(\d+)$/)?.[1]);

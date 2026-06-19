@@ -5,6 +5,7 @@ import { DatabaseModule } from './shared/database/database.module';
 import { SuperadminModule } from './modules/users/superadmin/superadmin.module';
 import { AdminModule } from './modules/users/admin/admin.module';
 import { InventoryApiModule } from './modules/inventory/inventory-api.module';
+import { PosModule } from './modules/pos/pos.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { InventoryApiModule } from './modules/inventory/inventory-api.module';
     AuthModule,
     SuperadminModule,
     AdminModule,
+    PosModule,
     InventoryApiModule,
   ],
 })

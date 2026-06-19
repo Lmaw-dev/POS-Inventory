@@ -144,7 +144,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   private isDatabaseConnectivityError(error: unknown): boolean {
     const databaseError = error as { code?: string };
-    const connectionErrorCodes = new Set(['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', '28P01', '3D000', 'XX000']);
+    const connectionErrorCodes = new Set(['EACCES', 'ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', '28P01', '3D000', 'XX000']);
 
     return Boolean(databaseError.code && connectionErrorCodes.has(databaseError.code));
   }
@@ -1732,11 +1732,493 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  private async resolveInventoryBusinessIdForStoreScope(user: AuthenticatedUser): Promise<string | null> {
+    if (!user.store_type) {
+      return null;
+    }
+
+    const module = user.store_type === 'RETAIL_STORE' ? 'RETAIL' : 'RESTAURANT';
+    const rows = await this.query<{ id: string }>(
+      `
+        SELECT b.id
+        FROM "Business" b
+        LEFT JOIN "User" matched_user
+          ON matched_user."businessId" = b.id
+         AND lower(matched_user.email) = lower($1)
+        WHERE $2::"BusinessModule" = ANY(b.modules)
+        ORDER BY
+          CASE WHEN matched_user.id IS NOT NULL THEN 0 ELSE 1 END,
+          CASE
+            WHEN $2::text = 'RESTAURANT' THEN (
+              SELECT COUNT(*)
+              FROM "Recipe" r
+              WHERE r."businessId" = b.id
+                AND COALESCE(r."isActive", TRUE) = TRUE
+                AND r."menuItemId" IS NOT NULL
+            )
+            ELSE (
+              SELECT COUNT(*)
+              FROM "InventoryItem" i
+              WHERE i."businessId" = b.id
+                AND i."itemType" = 'RETAIL_ITEM'::"InventoryItemType"
+            )
+          END DESC,
+          b."createdAt" DESC
+        LIMIT 1
+      `,
+      [user.email, module],
+    );
+
+    return rows[0]?.id ?? null;
+  }
+
+  private async syncRestaurantRecipesIntoPosCatalog(user: AuthenticatedUser) {
+    if (!user.store_id || user.store_type !== 'RESTAURANT') {
+      return;
+    }
+
+    const businessId = await this.resolveInventoryBusinessIdForStoreScope(user);
+    if (!businessId) {
+      return;
+    }
+
+    await this.withTransaction(async (client) => {
+      await this.queryWithClient(
+        client,
+        `
+          WITH recipe_categories AS (
+            SELECT DISTINCT trim(r.category) AS name
+            FROM "Recipe" r
+            WHERE r."businessId" = $2
+              AND COALESCE(r."isActive", TRUE) = TRUE
+              AND r."menuItemId" IS NOT NULL
+              AND trim(COALESCE(r.category, '')) <> ''
+          )
+          INSERT INTO product_categories (store_id, store_type, name)
+          SELECT $1, 'RESTAURANT', rc.name
+          FROM recipe_categories rc
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM product_categories pc
+            WHERE pc.store_id = $1
+              AND pc.store_type = 'RESTAURANT'
+              AND lower(pc.name) = lower(rc.name)
+          )
+        `,
+        [user.store_id, businessId],
+      );
+
+      await this.queryWithClient(
+        client,
+        `
+          WITH recipe_products AS (
+            SELECT
+              r.name,
+              r.category,
+              r.instructions,
+              r."sellingPrice",
+              r."imageUrl",
+              r."menuItemId",
+              NULL::TEXT AS description,
+              i.sku,
+              i.barcode,
+              i.unit,
+              i.size,
+              i.quantity,
+              i."minStock"
+            FROM "Recipe" r
+            JOIN "InventoryItem" i
+              ON i.id = r."menuItemId"
+             AND i."businessId" = r."businessId"
+            WHERE r."businessId" = $2
+              AND COALESCE(r."isActive", TRUE) = TRUE
+              AND r."menuItemId" IS NOT NULL
+          )
+          INSERT INTO products (
+            store_id,
+            category_id,
+            store_type,
+            name,
+            description,
+            price,
+            image_url,
+            sku,
+            barcode,
+            unit,
+            size,
+            stock_quantity,
+            low_stock_limit,
+            is_available,
+            inventory_item_id
+          )
+          SELECT
+            $1,
+            pc.id,
+            'RESTAURANT',
+            rp.name,
+            rp.description,
+            COALESCE(rp."sellingPrice", 0),
+            rp."imageUrl",
+            rp.sku,
+            rp.barcode,
+            rp.unit,
+            rp.size,
+            COALESCE(rp.quantity, 0),
+            COALESCE(rp."minStock", 0),
+            TRUE,
+            rp."menuItemId"
+          FROM recipe_products rp
+          LEFT JOIN product_categories pc
+            ON pc.store_id = $1
+           AND pc.store_type = 'RESTAURANT'
+           AND lower(pc.name) = lower(rp.category)
+          ON CONFLICT (store_id, inventory_item_id) WHERE inventory_item_id IS NOT NULL
+          DO UPDATE SET
+            category_id = EXCLUDED.category_id,
+            name = EXCLUDED.name,
+            description = EXCLUDED.description,
+            price = EXCLUDED.price,
+            image_url = EXCLUDED.image_url,
+            sku = EXCLUDED.sku,
+            barcode = EXCLUDED.barcode,
+            unit = EXCLUDED.unit,
+            size = EXCLUDED.size,
+            stock_quantity = EXCLUDED.stock_quantity,
+            low_stock_limit = EXCLUDED.low_stock_limit,
+            is_available = TRUE,
+            updated_at = CURRENT_TIMESTAMP
+        `,
+        [user.store_id, businessId],
+      );
+
+      await this.queryWithClient(
+        client,
+        `
+          UPDATE products p
+          SET is_available = FALSE,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE p.store_id = $1
+            AND p.store_type = 'RESTAURANT'
+            AND (
+              p.inventory_item_id IS NULL
+              OR NOT EXISTS (
+                SELECT 1
+                FROM "Recipe" r
+                WHERE r."businessId" = $2
+                  AND COALESCE(r."isActive", TRUE) = TRUE
+                  AND r."menuItemId" = p.inventory_item_id
+              )
+            )
+        `,
+        [user.store_id, businessId],
+      );
+
+      await this.queryWithClient(
+        client,
+        `
+          INSERT INTO ingredients_inventory (
+            store_id,
+            ingredient_name,
+            quantity_available,
+            unit,
+            low_stock_limit,
+            cost_per_unit,
+            is_available,
+            inventory_item_id
+          )
+          SELECT
+            $1,
+            i.name,
+            COALESCE(i.quantity, 0),
+            COALESCE(i.unit, 'unit'),
+            COALESCE(i."minStock", 0),
+            COALESCE(i."costPrice", i.price, 0),
+            TRUE,
+            i.id
+          FROM "InventoryItem" i
+          WHERE i."businessId" = $2
+            AND i."itemType" IN ('INGREDIENT'::"InventoryItemType", 'SUPPLY'::"InventoryItemType")
+          ON CONFLICT (store_id, inventory_item_id) WHERE inventory_item_id IS NOT NULL
+          DO UPDATE SET
+            ingredient_name = EXCLUDED.ingredient_name,
+            quantity_available = EXCLUDED.quantity_available,
+            unit = EXCLUDED.unit,
+            low_stock_limit = EXCLUDED.low_stock_limit,
+            cost_per_unit = EXCLUDED.cost_per_unit,
+            is_available = EXCLUDED.is_available,
+            updated_at = CURRENT_TIMESTAMP
+        `,
+        [user.store_id, businessId],
+      );
+
+      await this.queryWithClient(
+        client,
+        `
+          DELETE FROM product_ingredients pi
+          USING products p
+          WHERE p.id = pi.product_id
+            AND p.store_id = $1
+            AND p.store_type = 'RESTAURANT'
+            AND p.inventory_item_id IS NOT NULL
+        `,
+        [user.store_id],
+      );
+
+      await this.queryWithClient(
+        client,
+        `
+          INSERT INTO product_ingredients (
+            store_id,
+            product_id,
+            ingredient_id,
+            ingredient_name,
+            quantity_required,
+            default_quantity,
+            unit,
+            additional_cost,
+            is_required,
+            is_removable,
+            recipe_ingredient_id
+          )
+          SELECT
+            $1,
+            p.id,
+            ii.id,
+            inv.name,
+            ri.quantity,
+            ri.quantity,
+            COALESCE(ri.unit, inv.unit, 'unit'),
+            COALESCE(ri."unitCost", 0),
+            TRUE,
+            TRUE,
+            ri.id
+          FROM "Recipe" r
+          JOIN products p
+            ON p.store_id = $1
+           AND p.store_type = 'RESTAURANT'
+           AND p.inventory_item_id = r."menuItemId"
+          JOIN "RecipeIngredient" ri
+            ON ri."recipeId" = r.id
+          JOIN "InventoryItem" inv
+            ON inv.id = ri."itemId"
+          JOIN ingredients_inventory ii
+            ON ii.store_id = $1
+           AND ii.inventory_item_id = inv.id
+          WHERE r."businessId" = $2
+            AND COALESCE(r."isActive", TRUE) = TRUE
+            AND r."menuItemId" IS NOT NULL
+        `,
+        [user.store_id, businessId],
+      );
+    });
+  }
+
+  private async syncRetailInventoryIntoPosCatalog(user: AuthenticatedUser) {
+    if (!user.store_id || user.store_type !== 'RETAIL_STORE') {
+      return;
+    }
+
+    const businessId = await this.resolveInventoryBusinessIdForStoreScope(user);
+    if (!businessId) {
+      return;
+    }
+
+    await this.withTransaction(async (client) => {
+      await this.queryWithClient(
+        client,
+        `
+          WITH retail_categories AS (
+            SELECT DISTINCT trim(i.category) AS name
+            FROM "InventoryItem" i
+            WHERE i."businessId" = $2
+              AND i."itemType" = 'RETAIL_ITEM'::"InventoryItemType"
+              AND trim(COALESCE(i.category, '')) <> ''
+          )
+          INSERT INTO product_categories (store_id, store_type, name)
+          SELECT $1, 'RETAIL_STORE', rc.name
+          FROM retail_categories rc
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM product_categories pc
+            WHERE pc.store_id = $1
+              AND pc.store_type = 'RETAIL_STORE'
+              AND lower(pc.name) = lower(rc.name)
+          )
+        `,
+        [user.store_id, businessId],
+      );
+
+      await this.queryWithClient(
+        client,
+        `
+          WITH retail_items AS (
+            SELECT
+              i.id,
+              i.name,
+              i.description,
+              i.category,
+              i.price,
+              i."imageUrl",
+              i.sku,
+              i.barcode,
+              i.unit,
+              i.size,
+              i.quantity,
+              i."minStock"
+            FROM "InventoryItem" i
+            WHERE i."businessId" = $2
+              AND i."itemType" = 'RETAIL_ITEM'::"InventoryItemType"
+          )
+          INSERT INTO products (
+            store_id,
+            category_id,
+            store_type,
+            name,
+            description,
+            price,
+            image_url,
+            sku,
+            barcode,
+            unit,
+            size,
+            stock_quantity,
+            low_stock_limit,
+            is_available,
+            inventory_item_id
+          )
+          SELECT
+            $1,
+            pc.id,
+            'RETAIL_STORE',
+            ri.name,
+            ri.description,
+            COALESCE(ri.price, 0),
+            ri."imageUrl",
+            ri.sku,
+            ri.barcode,
+            ri.unit,
+            ri.size,
+            FLOOR(COALESCE(ri.quantity, 0))::int,
+            FLOOR(COALESCE(ri."minStock", 0))::int,
+            TRUE,
+            ri.id
+          FROM retail_items ri
+          LEFT JOIN product_categories pc
+            ON pc.store_id = $1
+           AND pc.store_type = 'RETAIL_STORE'
+           AND lower(pc.name) = lower(ri.category)
+          ON CONFLICT (store_id, inventory_item_id) WHERE inventory_item_id IS NOT NULL
+          DO UPDATE SET
+            category_id = EXCLUDED.category_id,
+            name = EXCLUDED.name,
+            description = EXCLUDED.description,
+            price = EXCLUDED.price,
+            image_url = EXCLUDED.image_url,
+            sku = EXCLUDED.sku,
+            barcode = EXCLUDED.barcode,
+            unit = EXCLUDED.unit,
+            size = EXCLUDED.size,
+            stock_quantity = EXCLUDED.stock_quantity,
+            low_stock_limit = EXCLUDED.low_stock_limit,
+            is_available = TRUE,
+            updated_at = CURRENT_TIMESTAMP
+        `,
+        [user.store_id, businessId],
+      );
+
+      await this.queryWithClient(
+        client,
+        `
+          INSERT INTO product_variants (
+            product_id,
+            size,
+            sku,
+            barcode,
+            image_url,
+            price,
+            stock_quantity,
+            low_stock_limit,
+            is_active,
+            inventory_item_id
+          )
+          SELECT
+            p.id,
+            p.size,
+            p.sku,
+            p.barcode,
+            p.image_url,
+            p.price,
+            p.stock_quantity,
+            p.low_stock_limit,
+            p.is_available,
+            p.inventory_item_id
+          FROM products p
+          WHERE p.store_id = $1
+            AND p.store_type = 'RETAIL_STORE'
+            AND p.inventory_item_id IS NOT NULL
+          ON CONFLICT (product_id, inventory_item_id) WHERE inventory_item_id IS NOT NULL
+          DO UPDATE SET
+            size = EXCLUDED.size,
+            sku = EXCLUDED.sku,
+            barcode = EXCLUDED.barcode,
+            image_url = EXCLUDED.image_url,
+            price = EXCLUDED.price,
+            stock_quantity = EXCLUDED.stock_quantity,
+            low_stock_limit = EXCLUDED.low_stock_limit,
+            is_active = EXCLUDED.is_active,
+            updated_at = CURRENT_TIMESTAMP
+        `,
+        [user.store_id],
+      );
+
+      await this.queryWithClient(
+        client,
+        `
+          UPDATE products p
+          SET is_available = FALSE,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE p.store_id = $1
+            AND p.store_type = 'RETAIL_STORE'
+            AND (
+              p.inventory_item_id IS NULL
+              OR NOT EXISTS (
+                SELECT 1
+                FROM "InventoryItem" i
+                WHERE i."businessId" = $2
+                  AND i."itemType" = 'RETAIL_ITEM'::"InventoryItemType"
+                  AND i.id = p.inventory_item_id
+              )
+            )
+        `,
+        [user.store_id, businessId],
+      );
+
+      await this.queryWithClient(
+        client,
+        `
+          DELETE FROM product_categories pc
+          WHERE pc.store_id = $1
+            AND pc.store_type = 'RETAIL_STORE'
+            AND NOT EXISTS (
+              SELECT 1 FROM products p WHERE p.category_id = pc.id
+            )
+        `,
+        [user.store_id],
+      );
+    });
+  }
+
   async listPosProducts(userId: number) {
     const user = await this.getUserStoreScope(userId);
 
     if (!user.store_id || !user.store_type) {
       throw new InternalServerErrorException('User account is not linked to a store.');
+    }
+
+    if (user.store_type === 'RESTAURANT') {
+      await this.syncRestaurantRecipesIntoPosCatalog(user);
+    } else if (user.store_type === 'RETAIL_STORE') {
+      await this.syncRetailInventoryIntoPosCatalog(user);
     }
 
     if (user.store_type === 'RETAIL_STORE') {
@@ -1752,6 +2234,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
             p.description,
             p.brand,
             p.material,
+            p.inventory_item_id,
             COALESCE(pv.image_url, p.image_url) AS image_url,
             p.is_available,
             c.name AS category_name,
@@ -1759,6 +2242,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
             pv.color,
             pv.sku,
             pv.barcode,
+            pv.inventory_item_id AS variant_inventory_item_id,
             pv.price,
             pv.stock_quantity,
             pv.low_stock_limit,
@@ -1798,6 +2282,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         ) availability ON TRUE
         WHERE p.store_id = $1
           AND p.store_type = $2
+          AND p.inventory_item_id IS NOT NULL
           AND COALESCE(p.is_available, TRUE) = TRUE
         ORDER BY p.name ASC
       `,
@@ -1869,6 +2354,72 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       ...product,
       ingredients: ingredientsByProduct.get(Number(product.id)) ?? [],
     }));
+  }
+
+  async getPosProductRecipe(input: { userId: number; productId: number }) {
+    const user = await this.getUserStoreScope(input.userId);
+
+    if (!user.store_id || !user.store_type) {
+      throw new InternalServerErrorException('User account is not linked to a store.');
+    }
+
+    if (user.store_type === 'RESTAURANT') {
+      await this.syncRestaurantRecipesIntoPosCatalog(user);
+    }
+
+    const rows = await this.query<any>(
+      `
+        SELECT
+          p.id AS product_id,
+          p.name AS product_name,
+          p.store_id,
+          p.store_type,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', pi.id,
+                'ingredient_id', pi.ingredient_id,
+                'name', COALESCE(ii.ingredient_name, pi.ingredient_name),
+                'quantity', pi.quantity_required,
+                'unit', pi.unit,
+                'additional_cost', pi.additional_cost,
+                'is_required', pi.is_required,
+                'is_removable', pi.is_removable,
+                'quantity_available', ii.quantity_available,
+                'is_available', COALESCE(ii.is_available, TRUE),
+                'stock_status',
+                  CASE
+                    WHEN ii.id IS NULL THEN 'missing'
+                    WHEN COALESCE(ii.is_available, TRUE) = FALSE THEN 'unavailable'
+                    WHEN ii.quantity_available < pi.quantity_required THEN 'insufficient'
+                    WHEN ii.quantity_available <= COALESCE(ii.low_stock_limit, 0) THEN 'low'
+                    ELSE 'available'
+                  END
+              )
+              ORDER BY pi.id ASC
+            ) FILTER (WHERE pi.id IS NOT NULL),
+            '[]'::json
+          ) AS ingredients
+        FROM products p
+        LEFT JOIN product_ingredients pi
+          ON pi.product_id = p.id
+         AND pi.store_id = p.store_id
+        LEFT JOIN ingredients_inventory ii
+          ON ii.id = pi.ingredient_id
+         AND ii.store_id = p.store_id
+        WHERE p.id = $1
+          AND p.store_id = $2
+        GROUP BY p.id, p.name, p.store_id, p.store_type
+        LIMIT 1
+      `,
+      [input.productId, user.store_id],
+    );
+
+    if (!rows[0]) {
+      throw new NotFoundException('Product was not found for this store.');
+    }
+
+    return rows[0];
   }
 
   async createPaidPosOrder(input: any) {
@@ -1946,10 +2497,12 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         );
         const orderItemId = itemRows[0].id;
 
-        if (user.store_type === 'RETAIL_STORE') {
-          await this.deductRetailProduct(client, user.store_id!, orderId, orderItemId, item.productId ?? item.id, item.variantId ?? item.variant_id, item.quantity ?? 1);
-        } else {
-          await this.deductRestaurantIngredients(client, user.store_id!, orderId, orderItemId, item);
+        if (isPaid) {
+          if (user.store_type === 'RETAIL_STORE') {
+            await this.deductRetailProduct(client, user.store_id!, orderId, orderItemId, item.productId ?? item.id, item.variantId ?? item.variant_id, item.quantity ?? 1);
+          } else {
+            await this.deductRestaurantIngredients(client, user.store_id!, orderId, orderItemId, item);
+          }
         }
       }
 
@@ -1996,7 +2549,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       `
         SELECT COALESCE(MAX(NULLIF(regexp_replace(order_number, '\\D', '', 'g'), '')::BIGINT), 100000) + 1 AS next_order_number
         FROM orders
+        WHERE store_id = $1
       `,
+      [user.store_id],
     );
 
     return { order_number: String(rows[0]?.next_order_number ?? 100001).padStart(6, '0') };

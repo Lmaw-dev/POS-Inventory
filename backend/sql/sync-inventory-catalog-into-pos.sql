@@ -107,7 +107,7 @@ item_source AS (
     sb.store_type,
     i.id AS inventory_item_id,
     i.name,
-    i.description,
+    NULL::TEXT AS description,
     i.category,
     i.price,
     i."imageUrl",

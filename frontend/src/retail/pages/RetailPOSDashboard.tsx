@@ -53,66 +53,6 @@ export function RetailPOSDashboard({ onLogout, onNavigate, isAdmin = false, stor
   const recentTransactions = [...countedOrders].slice(0, 5);
 
   // Top Selling Items (same design as restaurant POS)
-  const allTopSellingItems = [
-    {
-      id: 'item-1',
-      name: 'Denim Jacket',
-      sold: 145,
-      revenue: '₱36,250',
-      image: 'https://images.unsplash.com/photo-1551028719-00167b16eac5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200&h=200'
-    },
-    {
-      id: 'item-2',
-      name: 'Sneakers',
-      sold: 128,
-      revenue: '₱51,200',
-      image: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200&h=200'
-    },
-    {
-      id: 'item-3',
-      name: 'Floral Dress',
-      sold: 98,
-      revenue: '₱34,300',
-      image: 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200&h=200'
-    },
-    {
-      id: 'item-4',
-      name: 'Polo Shirt',
-      sold: 187,
-      revenue: '₱28,050',
-      image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200&h=200'
-    },
-    {
-      id: 'item-5',
-      name: 'Jeans',
-      sold: 176,
-      revenue: '₱56,320',
-      image: 'https://images.unsplash.com/photo-1542272604-787c3835535d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200&h=200'
-    },
-    {
-      id: 'item-6',
-      name: 'Leather Bag',
-      sold: 68,
-      revenue: '₱34,000',
-      image: 'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200&h=200'
-    },
-    {
-      id: 'item-7',
-      name: 'Summer Dress',
-      sold: 92,
-      revenue: '₱25,760',
-      image: 'https://images.unsplash.com/photo-1496747611176-843222e1e57c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200&h=200'
-    },
-    {
-      id: 'item-8',
-      name: 'Chino Pants',
-      sold: 155,
-      revenue: '₱31,000',
-      image: 'https://images.unsplash.com/photo-1473966968600-fa801b869a1a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200&h=200'
-    },
-  ];
-
-  const topSellingItems = allTopSellingItems.slice(0, 4);
 
   const salesDataByFilter = {
     week: [
@@ -425,6 +365,5 @@ export function RetailPOSDashboard({ onLogout, onNavigate, isAdmin = false, stor
     </div>
   );
 }
-
 
 

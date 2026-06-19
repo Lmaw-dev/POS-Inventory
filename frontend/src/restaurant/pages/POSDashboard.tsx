@@ -94,66 +94,6 @@ export function POSDashboard({ onLogout, onNavigate, isAdmin = false, storeBrand
     return salesDataByFilter[dateFilter as keyof typeof salesDataByFilter] || salesDataByFilter.week;
   }, [dateFilter]);
 
-  const allTopSellingItems = [
-    {
-      id: 'item-1',
-      name: 'Chicken Adobo',
-      sold: 145,
-      revenue: '₱21,750',
-      image: 'https://images.unsplash.com/photo-1596699917234-1c93c61a1083?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200&h=200'
-    },
-    {
-      id: 'item-2',
-      name: 'Pork Sinigang',
-      sold: 128,
-      revenue: '₱23,040',
-      image: 'https://images.unsplash.com/photo-1583913459026-781129ce061f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200&h=200'
-    },
-    {
-      id: 'item-3',
-      name: 'Beef Caldereta',
-      sold: 98,
-      revenue: '₱21,560',
-      image: 'https://images.unsplash.com/photo-1608500218861-01091cdc501e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200&h=200'
-    },
-    {
-      id: 'item-4',
-      name: 'Sisig',
-      sold: 87,
-      revenue: '₱10,440',
-      image: 'https://images.unsplash.com/photo-1658713064117-51f51ecfaf69?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200&h=200'
-    },
-    {
-      id: 'item-5',
-      name: 'Spring Rolls',
-      sold: 76,
-      revenue: '₱6,080',
-      image: 'https://images.unsplash.com/photo-1534674343483-e7df7f1c69c3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200&h=200'
-    },
-    {
-      id: 'item-6',
-      name: 'Halo-Halo',
-      sold: 68,
-      revenue: '₱6,460',
-      image: 'https://images.unsplash.com/photo-1591921954568-c7358607c1c2?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200&h=200'
-    },
-    {
-      id: 'item-7',
-      name: 'Pancit Canton',
-      sold: 62,
-      revenue: '₱7,440',
-      image: 'https://images.unsplash.com/photo-1534674343483-e7df7f1c69c3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200&h=200'
-    },
-    {
-      id: 'item-8',
-      name: 'Lechon Kawali',
-      sold: 55,
-      revenue: '₱13,200',
-      image: 'https://images.unsplash.com/photo-1596699917234-1c93c61a1083?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200&h=200'
-    },
-  ];
-
-  const topSellingItems = allTopSellingItems.slice(0, 4);
 
   const databaseSalesData = useMemo(() => {
     const paidOrders = orders.filter((order) => order.paymentStatus === 'Paid');
