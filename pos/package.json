@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "dev": "concurrently \"npm --prefix frontend run dev\" \"npm --prefix backend run start:dev\"",
+    "dev": "concurrently \"npm --prefix frontend run dev\" \"npm --prefix backend run start:dev\" \"npm --prefix ../inventory/backend run start:dev:no-migrate\"",
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:backend": "npm --prefix backend run start:dev",
     "build": "npm --prefix frontend run build",
