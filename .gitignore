@@ -9,3 +9,5 @@ backend/dist/
 backend/.env
 backend/*.tsbuildinfo
 backend/backend-live.*.log
+dev.out.log
+dev.err.log

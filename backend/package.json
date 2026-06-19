@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "start": "node dist/main.js",
-    "start:dev": "ts-node-dev --respawn --transpile-only --exit-child src/main.ts",
+    "start:dev": "npm run build && node dist/main.js",
     "build": "tsc -p tsconfig.build.json",
     "format": "prettier --write \"src/**/*.ts\"",
     "db:generate": "prisma generate",
