@@ -57,17 +57,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     const connectionString = process.env.DATABASE_URL;
     const maxPoolConnections = Number(process.env.DB_POOL_MAX ?? 1);
     const poolOptions = {
-<<<<<<< HEAD:backend/src/shared/database/database.service.ts
-      max: Number.isFinite(maxPoolConnections) && maxPoolConnections > 0 ? maxPoolConnections : 1,
-=======
-<<<<<<< Updated upstream
-      max: Number.isFinite(maxPoolConnections) && maxPoolConnections > 0 ? maxPoolConnections : 3,
->>>>>>> 0bd7d10da9aa18eac98eed8b2da858b84c7473be:pos/backend/src/shared/database/database.service.ts
-      idleTimeoutMillis: Number(process.env.DB_POOL_IDLE_TIMEOUT_MS ?? 5000),
-=======
       max: Number.isFinite(maxPoolConnections) && maxPoolConnections > 0 ? maxPoolConnections : 1,
       idleTimeoutMillis: Number(process.env.DB_POOL_IDLE_TIMEOUT_MS ?? 10000),
->>>>>>> Stashed changes
       connectionTimeoutMillis: Number(process.env.DB_POOL_CONNECTION_TIMEOUT_MS ?? 10000),
       allowExitOnIdle: true,
     };

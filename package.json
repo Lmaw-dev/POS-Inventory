@@ -1,10 +1,9 @@
 {
-<<<<<<< HEAD
   "name": "bukolabs-pos-root",
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "dev": "concurrently \"npm --prefix frontend run dev\" \"npm --prefix backend run start:dev\" \"npm --prefix ../inventory/backend run start:dev:no-migrate\"",
+    "dev": "concurrently \"npm --prefix frontend run dev\" \"npm --prefix backend run start:dev\"",
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:backend": "npm --prefix backend run start:dev",
     "build": "npm --prefix frontend run build",
@@ -15,22 +14,5 @@
   },
   "devDependencies": {
     "concurrently": "^10.0.3"
-=======
-  "name": "pos-inventory-root",
-  "private": true,
-  "version": "0.1.0",
-  "scripts": {
-    "dev": "npm --prefix pos run dev",
-    "dev:pos": "npm --prefix pos run dev",
-    "dev:pos:frontend": "npm --prefix pos/frontend run dev",
-    "dev:pos:backend": "npm --prefix pos/backend run start:dev",
-    "dev:inventory:frontend": "npm --prefix inventory/frontend run dev",
-    "dev:inventory:backend": "npm --prefix inventory/backend run start:dev",
-    "build": "npm --prefix pos/frontend run build",
-    "build:pos": "npm --prefix pos/frontend run build",
-    "build:inventory": "npm --prefix inventory/frontend run build",
-    "install:all": "npm --prefix pos install && npm --prefix pos/frontend install && npm --prefix pos/backend install && npm --prefix inventory install && npm --prefix inventory/frontend install && npm --prefix inventory/backend install",
-    "postinstall": "npm run install:all"
->>>>>>> 0bd7d10da9aa18eac98eed8b2da858b84c7473be
   }
 }
