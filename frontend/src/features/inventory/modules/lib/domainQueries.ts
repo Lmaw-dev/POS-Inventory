@@ -82,7 +82,7 @@ const domainInvalidationDependencies = new Map<string, QueryKey[]>([
   ['stock-movements', [domainQueryKeys.inventory]],
   ['sales', [domainQueryKeys.inventory, domainQueryKeys.stockMovements]],
   ['bundles', [domainQueryKeys.inventory]],
-  ['recipes', [domainQueryKeys.kitchenOrders]],
+  ['recipes', [domainQueryKeys.kitchenOrders, ['pos-menu']]],
   ['kitchen-orders', [
     domainQueryKeys.inventory,
     domainQueryKeys.stockMovements,

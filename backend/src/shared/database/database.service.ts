@@ -2266,12 +2266,16 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         SELECT
           p.*,
           c.name AS category_name,
+          COALESCE(r.modifiers, '[]'::jsonb) AS modifiers,
           CASE
             WHEN p.store_type = 'RESTAURANT' THEN COALESCE(availability.available_quantity, 0)
             ELSE COALESCE(p.stock_quantity, 0)
           END AS available_quantity
         FROM products p
         LEFT JOIN product_categories c ON c.id = p.category_id
+        LEFT JOIN "Recipe" r
+          ON r."menuItemId" = p.inventory_item_id
+         AND COALESCE(r."isActive", TRUE) = TRUE
         LEFT JOIN LATERAL (
           SELECT MIN(FLOOR(ii.quantity_available / NULLIF(pi.quantity_required, 0))) AS available_quantity
           FROM product_ingredients pi
@@ -2296,6 +2300,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
               pi.id,
               pi.product_id,
               pi.ingredient_id,
+              ii.inventory_item_id,
               COALESCE(ii.ingredient_name, pi.ingredient_name) AS name,
               pi.quantity_required AS quantity,
               pi.unit,

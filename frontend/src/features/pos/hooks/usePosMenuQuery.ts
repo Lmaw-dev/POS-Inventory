@@ -15,6 +15,14 @@ export type PosMenuIngredient = {
   alternatives?: unknown[];
 };
 
+export type PosMenuModifier = {
+  id: string;
+  name: string;
+  type: 'remove';
+  itemId?: string;
+  itemName?: string;
+};
+
 export type PosMenuProduct = {
   id: number;
   variant_id?: number;
@@ -37,6 +45,7 @@ export type PosMenuProduct = {
   is_available?: boolean;
   is_active?: boolean;
   ingredients?: PosMenuIngredient[];
+  modifiers?: PosMenuModifier[];
 };
 
 export function usePosMenuQuery(userId?: number | string | null) {

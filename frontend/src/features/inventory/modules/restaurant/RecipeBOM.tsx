@@ -93,7 +93,7 @@ const calculateRecipeGrossMarginPercent = (recipe: Recipe) => {
 
 export function RecipeBOM() {
   const { currentUser } = useSession();
-  const isAdmin = currentUser?.role === "Admin";
+  const canManageRecipes = currentUser?.role === "Admin" || currentUser?.role === "Manager";
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -317,8 +317,8 @@ export function RecipeBOM() {
   const handleCreateRecipe = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!isAdmin) {
-      toast.error("Only admin users can create or edit recipes and pricing.");
+    if (!canManageRecipes) {
+      toast.error("Only admin or manager users can create or edit recipes and pricing.");
       return;
     }
 
@@ -456,8 +456,8 @@ export function RecipeBOM() {
   };
 
   const handleEditRecipe = (recipe: Recipe) => {
-    if (!isAdmin) {
-      toast.error("Only admin users can edit recipes and pricing.");
+    if (!canManageRecipes) {
+      toast.error("Only admin or manager users can edit recipes and pricing.");
       return;
     }
 
@@ -484,8 +484,8 @@ export function RecipeBOM() {
   };
 
   const handleDeleteRecipe = (id: string) => {
-    if (!isAdmin) {
-      toast.error("Only admin users can delete recipes.");
+    if (!canManageRecipes) {
+      toast.error("Only admin or manager users can delete recipes.");
       return;
     }
     setPendingDeleteId(id);
@@ -600,12 +600,12 @@ export function RecipeBOM() {
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2">Recipe & BOM</h1>
           <p className="text-muted-foreground">
-            {isAdmin
+            {canManageRecipes
               ? "Manage recipes, ingredient costs, and menu pricing"
               : "View recipe costs, menu prices, and scaling"}
           </p>
         </div>
-        {isAdmin && (
+        {canManageRecipes && (
           <button
             onClick={handleOpenCreateModal}
             className="mt-4 md:mt-0 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-2xl hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 flex items-center gap-2"
@@ -733,7 +733,7 @@ export function RecipeBOM() {
                 <Calculator className="w-4 h-4" />
                 View & Scale
               </button>
-              {isAdmin && (
+              {canManageRecipes && (
                 <>
                   <button
                     onClick={() => handleEditRecipe(recipe)}
