@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle, ClipboardList, PackageMinus, ReceiptText, RotateCcw, Search, XCircle } from "lucide-react";
+import { getApiBaseUrl } from "../../../../auth/services/auth";
 import { InventoryProduct } from "../lib/inventoryLogic";
 import {
   useCompleteRestaurantKitchenOrderMutation,
@@ -58,7 +59,40 @@ type POSOrder = {
   voidedAt?: string;
 };
 
+type CompletedPosReceipt = {
+  id: number | string;
+  order_number?: string;
+  receipt_id?: string;
+  customer_name?: string | null;
+  items?: Array<{ product_name?: string; quantity?: number | string; unit_price?: number | string; line_total?: number | string }>;
+  subtotal?: number | string;
+  discount_amount?: number | string;
+  tax_amount?: number | string;
+  service_charge?: number | string;
+  total_amount?: number | string;
+  amount_paid?: number | string | null;
+  change_amount?: number | string | null;
+  created_at?: string;
+  completed_at?: string | null;
+  cashier_name?: string | null;
+  payment_status?: string;
+  order_status?: string;
+};
+
+type ReceiptHistoryRow = {
+  id: string;
+  receiptNo: string;
+  itemName: string;
+  quantity: number;
+  customer?: string | null;
+  staff?: string | null;
+  status: string;
+  total?: number;
+  legacyOrder?: POSOrder;
+};
+
 const normalizeName = (value: string | undefined) => (value || '').trim().toLowerCase();
+const money = (value: unknown) => `PHP ${Number(value ?? 0).toFixed(2)}`;
 
 const reportSyncError = (error: unknown) => {
   window.dispatchEvent(
@@ -71,7 +105,7 @@ const reportSyncError = (error: unknown) => {
   );
 };
 
-export function POSKitchenOrders() {
+export function POSKitchenOrders({ posUserId }: { posUserId?: number | string | null } = {}) {
   const [searchQuery, setSearchQuery] = useState("");
   const [receiptNo, setReceiptNo] = useState("");
   const [recipeId, setRecipeId] = useState("");
@@ -82,6 +116,8 @@ export function POSKitchenOrders() {
   const [isCompleting, setIsCompleting] = useState(false);
   const [isVoiding, setIsVoiding] = useState(false);
   const [excludedIngredientIds, setExcludedIngredientIds] = useState<Set<string>>(new Set());
+  const [completedReceipts, setCompletedReceipts] = useState<CompletedPosReceipt[]>([]);
+  const [isLoadingReceipts, setIsLoadingReceipts] = useState(false);
 
   const { data: orderRecords = [] } = useRestaurantKitchenOrdersQuery();
   const orders = orderRecords as POSOrder[];
@@ -91,6 +127,43 @@ export function POSKitchenOrders() {
   const { data: inventory = [] } = useRestaurantInventoryQuery<(InventoryProduct & { backendId?: string })[]>();
   const completeKitchenOrder = useCompleteRestaurantKitchenOrderMutation();
   const voidKitchenOrder = useVoidRestaurantKitchenOrderMutation();
+
+  useEffect(() => {
+    if (!posUserId) {
+      setCompletedReceipts([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsLoadingReceipts(true);
+
+    fetch(`${getApiBaseUrl()}/admin/pos/orders?user_id=${encodeURIComponent(String(posUserId))}`, {
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const data = await response.json().catch(() => null);
+          throw new Error(data?.message ?? "Unable to load completed POS receipts.");
+        }
+        return response.json();
+      })
+      .then((rows: CompletedPosReceipt[]) => {
+        setCompletedReceipts(
+          rows.filter((order) => order.payment_status === "PAID" || order.order_status === "COMPLETED"),
+        );
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        reportSyncError(error);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsLoadingReceipts(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [posUserId]);
 
   const selectedRecipe = activeRecipes.find((recipe) => recipe.id === recipeId);
 
@@ -122,12 +195,57 @@ export function POSKitchenOrders() {
     });
   }, [inventory, quantity, selectedRecipe]);
 
-  const filteredOrders = orders.filter((order) => {
+  const posReceiptRows: ReceiptHistoryRow[] = useMemo(() => (
+    completedReceipts.flatMap((receipt) => {
+      const items = Array.isArray(receipt.items) ? receipt.items : [];
+      if (items.length === 0) {
+        return [{
+          id: `pos-${receipt.id}`,
+          receiptNo: receipt.receipt_id || receipt.order_number || String(receipt.id),
+          itemName: "POS order",
+          quantity: 0,
+          customer: receipt.customer_name || "Walk-in Customer",
+          staff: receipt.cashier_name || "Staff",
+          status: receipt.payment_status === "PAID" ? "completed" : String(receipt.order_status || "completed").toLowerCase(),
+          total: Number(receipt.total_amount ?? 0),
+        }];
+      }
+
+      return items.map((item, index) => ({
+        id: `pos-${receipt.id}-${index}`,
+        receiptNo: receipt.receipt_id || receipt.order_number || String(receipt.id),
+        itemName: item.product_name || "POS item",
+        quantity: Number(item.quantity ?? 0),
+        customer: receipt.customer_name || "Walk-in Customer",
+        staff: receipt.cashier_name || "Staff",
+        status: receipt.payment_status === "PAID" ? "completed" : String(receipt.order_status || "completed").toLowerCase(),
+        total: Number(item.line_total ?? Number(item.unit_price ?? 0) * Number(item.quantity ?? 0)),
+      }));
+    })
+  ), [completedReceipts]);
+
+  const legacyKitchenRows: ReceiptHistoryRow[] = useMemo(() => (
+    orders.map((order) => ({
+      id: order.id,
+      receiptNo: order.receiptNo,
+      itemName: order.recipeName,
+      quantity: order.quantity,
+      customer: order.modifiers?.length ? order.modifiers.join(", ") : "-",
+      staff: order.completedBy,
+      status: order.status,
+      legacyOrder: order,
+    }))
+  ), [orders]);
+
+  const historyRows = posReceiptRows.length > 0 ? posReceiptRows : legacyKitchenRows;
+  const filteredHistoryRows = historyRows.filter((row) => {
     const query = searchQuery.toLowerCase();
     return (
-      (order.receiptNo || '').toLowerCase().includes(query) ||
-      (order.recipeName || '').toLowerCase().includes(query) ||
-      (order.status || '').toLowerCase().includes(query)
+      (row.receiptNo || '').toLowerCase().includes(query) ||
+      (row.itemName || '').toLowerCase().includes(query) ||
+      (row.customer || '').toLowerCase().includes(query) ||
+      (row.staff || '').toLowerCase().includes(query) ||
+      (row.status || '').toLowerCase().includes(query)
     );
   });
 
@@ -344,7 +462,7 @@ export function POSKitchenOrders() {
           <div className="mb-4 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <ClipboardList className="h-5 w-5 text-primary" />
-              <h2 className="font-semibold text-foreground">Kitchen Receipt History</h2>
+              <h2 className="font-semibold text-foreground">POS Order Receipt History</h2>
             </div>
             <div className="relative w-72">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -357,49 +475,57 @@ export function POSKitchenOrders() {
               <thead className="bg-muted/50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Receipt</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Recipe</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-foreground">POS Item</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-foreground">Qty</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Modifiers</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Customer / Staff</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Actions</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-foreground">Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filteredOrders.map((order) => (
-                  <tr key={order.id}>
-                    <td className="px-4 py-3 text-sm font-medium text-primary">{order.receiptNo}</td>
-                    <td className="px-4 py-3 text-sm text-foreground">{order.recipeName}</td>
-                    <td className="px-4 py-3 text-center text-sm text-foreground">{order.quantity}</td>
+                {filteredHistoryRows.map((row) => (
+                  <tr key={row.id}>
+                    <td className="px-4 py-3 text-sm font-medium text-primary">{row.receiptNo}</td>
+                    <td className="px-4 py-3 text-sm text-foreground">{row.itemName}</td>
+                    <td className="px-4 py-3 text-center text-sm text-foreground">{row.quantity}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {order.modifiers?.length ? order.modifiers.join(", ") : "-"}
+                      <div>{row.customer || "-"}</div>
+                      <div>{row.staff || "-"}</div>
                     </td>
                     <td className="px-4 py-3">
                       <span
                         className="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium"
                         style={
-                          order.status === "completed"
+                          row.status === "completed"
                             ? { borderColor: "#008967", backgroundColor: "#D1F2E8", color: "#007A5E" }
                             : { borderColor: "#FCA5A5", backgroundColor: "#FEE2E2", color: "#991B1B" }
                         }
                       >
-                        {order.status === "completed" ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                        {order.status}
+                        {row.status === "completed" ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                        {row.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      {order.status === "completed" && (
-                        <button type="button" onClick={() => setVoidingOrderId(order.id)} className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-100">
+                    <td className="px-4 py-3 text-right text-sm font-medium text-foreground">
+                      {row.legacyOrder ? (
+                        row.legacyOrder.status === "completed" ? (
+                          <button type="button" onClick={() => setVoidingOrderId(row.legacyOrder!.id)} className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-100">
                           <RotateCcw className="h-3 w-3" />
                           Void
-                        </button>
+                          </button>
+                        ) : row.legacyOrder.status === "voided" ? (
+                          <span className="text-xs text-muted-foreground">{row.legacyOrder.voidReason}</span>
+                        ) : "-"
+                      ) : (
+                        money(row.total)
                       )}
-                      {order.status === "voided" && <span className="text-xs text-muted-foreground">{order.voidReason}</span>}
                     </td>
                   </tr>
                 ))}
-                {filteredOrders.length === 0 && (
+                {filteredHistoryRows.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">No POS kitchen receipts yet</td>
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                      {isLoadingReceipts ? "Loading POS order receipts..." : "No POS order receipts yet"}
+                    </td>
                   </tr>
                 )}
               </tbody>

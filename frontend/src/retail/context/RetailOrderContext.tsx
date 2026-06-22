@@ -293,6 +293,7 @@ function mapDatabaseRetailOrder(row: any): Order {
       image: item.image_url ?? item.image ?? undefined,
     })),
     paymentId: row.payment_number ?? undefined,
+    receiptId: row.receipt_id ?? row.payment_number ?? (row.order_number ? `REC-${row.order_number}` : undefined),
     cashReceived: row.amount_paid !== null && row.amount_paid !== undefined ? Number(row.amount_paid) : undefined,
     changeGiven: row.change_amount !== null && row.change_amount !== undefined ? Number(row.change_amount) : undefined,
     cashier: row.cashier_name ?? undefined,

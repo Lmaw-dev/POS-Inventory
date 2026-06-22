@@ -113,7 +113,7 @@ export function InventoryModulePage({
             )}
             <div className="flex-1 overflow-y-auto p-6">
               <Suspense fallback={<div className="flex h-full items-center justify-center text-sm text-slate-500">Loading inventory...</div>}>
-                {isRestaurant ? renderRestaurantPage(currentPage) : renderRetailPage(currentPage, inventoryUser)}
+                {isRestaurant ? renderRestaurantPage(currentPage, currentUser) : renderRetailPage(currentPage, inventoryUser)}
               </Suspense>
             </div>
           </div>
@@ -168,7 +168,7 @@ function renderRetailPage(page: Page, currentUser: InventoryUser | null): ReactN
   }
 }
 
-function renderRestaurantPage(page: Page): ReactNode {
+function renderRestaurantPage(page: Page, currentUser: AuthenticatedUser | null): ReactNode {
   switch (page) {
     case 'inventory-stock-alerts':
       return <RestaurantStockControl />;
@@ -181,7 +181,7 @@ function renderRestaurantPage(page: Page): ReactNode {
     case 'inventory-products-received':
       return <RestaurantGoodsReceived />;
     case 'inventory-pos-kitchen':
-      return <RestaurantKitchenOrders />;
+      return <RestaurantKitchenOrders posUserId={currentUser?.id ?? null} />;
     case 'inventory-recipe-bom':
       return <RestaurantRecipeBom />;
     case 'inventory-transfers':

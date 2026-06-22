@@ -9,6 +9,7 @@ import {
   OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { Pool, PoolClient, QueryResultRow } from 'pg';
 import * as bcrypt from 'bcrypt';
 import { AuthenticatedUser } from '../common/types';
@@ -2534,6 +2535,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
             input.payment.changeAmount ?? 0,
           ],
         );
+
+        await this.recordInventorySaleForPosOrder(client, user, orderId, paymentNumber);
       }
 
         return { id: orderId, order_number: orderNumber };
@@ -2590,6 +2593,31 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     }
 
     const rows = await this.withTransaction(async (client) => {
+      const existingRows = await this.queryWithClient<{
+        id: number;
+        order_number: string;
+        total_amount: string | number;
+        payment_status: string | null;
+      }>(
+        client,
+        `
+          SELECT id, order_number, total_amount, payment_status
+          FROM orders
+          WHERE store_id = $1
+            AND order_number = $2
+            AND (
+              ($3 = 'RETAIL_STORE' AND order_type = 'RETAIL')
+              OR ($3 = 'RESTAURANT' AND order_type <> 'RETAIL')
+            )
+          FOR UPDATE
+        `,
+        [user.store_id, input.orderNumber, user.store_type],
+      );
+
+      if (existingRows.length === 0) {
+        return existingRows;
+      }
+
       const updatedRows = updates.length > 0
         ? await this.queryWithClient<{ id: number; order_number: string; total_amount: string | number }>(
             client,
@@ -2606,28 +2634,14 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
             `,
             [...values, user.store_type],
           )
-        : await this.queryWithClient<{ id: number; order_number: string; total_amount: string | number }>(
-            client,
-            `
-              SELECT id, order_number, total_amount
-              FROM orders
-              WHERE store_id = $1
-                AND order_number = $2
-                AND (
-                  ($3 = 'RETAIL_STORE' AND order_type = 'RETAIL')
-                  OR ($3 = 'RESTAURANT' AND order_type <> 'RETAIL')
-                )
-              LIMIT 1
-            `,
-            [user.store_id, input.orderNumber, user.store_type],
-          );
-
-      if (updatedRows.length === 0) {
-        return updatedRows;
-      }
+        : existingRows;
 
       if (isPaymentUpdate) {
         const order = updatedRows[0];
+        if (existingRows[0].payment_status !== 'PAID') {
+          await this.deductPaidOrderInventory(client, user, order.id);
+        }
+
         const paymentNumber = await this.createUniquePaymentNumber(client, input.payment.paymentNumber ?? `PAY-${order.order_number}`);
         await this.queryWithClient(
           client,
@@ -2649,6 +2663,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
             input.payment.changeAmount ?? 0,
           ],
         );
+
+        await this.recordInventorySaleForPosOrder(client, user, order.id, paymentNumber);
       }
 
       return updatedRows;
@@ -2715,7 +2731,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
             '[]'::json
           ) AS items
         FROM orders o
-        LEFT JOIN payments p ON p.order_id = o.id
+        LEFT JOIN LATERAL (
+          SELECT payment_number, payment_method, amount_paid, change_amount, processed_by
+          FROM payments
+          WHERE order_id = o.id
+          ORDER BY id DESC
+          LIMIT 1
+        ) p ON TRUE
         LEFT JOIN users cashier_user ON cashier_user.id = o.cashier_id
         LEFT JOIN users payment_user ON payment_user.id = p.processed_by
         LEFT JOIN order_items oi ON oi.order_id = o.id
@@ -2839,14 +2861,240 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return `${String(productId).padStart(8, '0')}${String(index + 1).padStart(4, '0')}`;
   }
 
-  private async deductRetailProduct(client: PoolClient, storeId: number, orderId: number, orderItemId: number, productId: number, variantId: number, quantity: number) {
-    const variantRows = await this.queryWithClient<{ stock_quantity: number; product_id: number; size: string | null; color: string | null; inventory_item_id: string | null }>(
+  private async deductPaidOrderInventory(client: PoolClient, user: AuthenticatedUser, orderId: number) {
+    if (!user.store_id || !user.store_type) return;
+
+    const items = await this.queryWithClient<any>(
       client,
       `
-        SELECT pv.stock_quantity, pv.product_id, pv.size, pv.color
-             , COALESCE(pv.inventory_item_id, p.inventory_item_id) AS inventory_item_id
+        SELECT
+          id,
+          product_id AS "productId",
+          variant_id AS "variantId",
+          product_name AS name,
+          category_name AS "categoryName",
+          size,
+          color,
+          quantity,
+          unit_price AS price,
+          item_type AS "orderType",
+          notes
+        FROM order_items
+        WHERE order_id = $1
+        ORDER BY id ASC
+      `,
+      [orderId],
+    );
+
+    for (const item of items) {
+      if (user.store_type === 'RETAIL_STORE') {
+        await this.deductRetailProduct(client, user.store_id, orderId, Number(item.id), Number(item.productId), Number(item.variantId), Number(item.quantity ?? 1));
+      } else {
+        await this.deductRestaurantIngredients(client, user.store_id, orderId, Number(item.id), item);
+      }
+    }
+  }
+
+  private async recordInventorySaleForPosOrder(
+    client: PoolClient,
+    user: AuthenticatedUser,
+    orderId: number,
+    paymentNumber?: string,
+  ) {
+    if (!user.store_id || !user.store_type) return;
+
+    const businessId = await this.resolveInventoryBusinessIdForStoreScope(user);
+    if (!businessId) return;
+
+    const module = user.store_type === 'RETAIL_STORE' ? 'RETAIL' : 'RESTAURANT';
+    const locationRows = await this.queryWithClient<{ id: string }>(
+      client,
+      `
+        SELECT id
+        FROM "Location"
+        WHERE "businessId" = $1
+        ORDER BY "createdAt" ASC
+        LIMIT 1
+      `,
+      [businessId],
+    );
+    const locationId = locationRows[0]?.id;
+    if (!locationId) return;
+
+    const cashierRows = await this.queryWithClient<{ id: string }>(
+      client,
+      `
+        SELECT id
+        FROM "User"
+        WHERE "businessId" = $1
+          AND lower(email) = lower($2)
+        ORDER BY "createdAt" ASC
+        LIMIT 1
+      `,
+      [businessId, user.email],
+    );
+    const cashierId = cashierRows[0]?.id ?? null;
+
+    const orderRows = await this.queryWithClient<any>(
+      client,
+      `
+        SELECT
+          o.id,
+          o.order_number,
+          o.customer_name,
+          o.subtotal,
+          o.discount_amount,
+          o.tax_amount,
+          o.total_amount,
+          o.created_at,
+          o.completed_at,
+          p.payment_number,
+          COALESCE(p.payment_number, 'REC-' || o.order_number) AS receipt_id,
+          p.payment_method,
+          p.amount_paid,
+          p.change_amount
+        FROM orders o
+        LEFT JOIN LATERAL (
+          SELECT payment_number, payment_method, amount_paid, change_amount
+          FROM payments
+          WHERE order_id = o.id
+          ORDER BY CASE WHEN payment_number = $3 THEN 0 ELSE 1 END, id DESC
+          LIMIT 1
+        ) p ON TRUE
+        WHERE o.id = $1
+          AND o.store_id = $2
+        LIMIT 1
+      `,
+      [orderId, user.store_id, paymentNumber ?? null],
+    );
+    const order = orderRows[0];
+    if (!order) return;
+
+    const transactionNumber = order.order_number ?? String(order.id);
+    const saleRows = await this.queryWithClient<{ id: string }>(
+      client,
+      `
+        INSERT INTO "Sale" (
+          id, "transactionNumber", "locationId", "cashierId", subtotal,
+          discount, tax, total, "paymentMethod", "amountPaid", change,
+          customer, status, "businessId", module, "createdAt", "updatedAt"
+        )
+        VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9, $10, $11,
+          $12, 'COMPLETED'::"SaleStatus", $13, $14::"BusinessModule", COALESCE($15::timestamptz, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP
+        )
+        ON CONFLICT ("businessId", "transactionNumber") DO UPDATE
+        SET "locationId" = EXCLUDED."locationId",
+            "cashierId" = EXCLUDED."cashierId",
+            subtotal = EXCLUDED.subtotal,
+            discount = EXCLUDED.discount,
+            tax = EXCLUDED.tax,
+            total = EXCLUDED.total,
+            "paymentMethod" = EXCLUDED."paymentMethod",
+            "amountPaid" = EXCLUDED."amountPaid",
+            change = EXCLUDED.change,
+            customer = EXCLUDED.customer,
+            status = EXCLUDED.status,
+            module = EXCLUDED.module,
+            "updatedAt" = CURRENT_TIMESTAMP
+        RETURNING id
+      `,
+      [
+        randomUUID(),
+        transactionNumber,
+        locationId,
+        cashierId,
+        Number(order.subtotal ?? 0),
+        Number(order.discount_amount ?? 0),
+        Number(order.tax_amount ?? 0),
+        Number(order.total_amount ?? 0),
+        order.payment_method ?? 'Cash',
+        Number(order.amount_paid ?? order.total_amount ?? 0),
+        Number(order.change_amount ?? 0),
+        order.customer_name ?? null,
+        businessId,
+        module,
+        order.completed_at ?? order.created_at ?? null,
+      ],
+    );
+    const saleId = saleRows[0]?.id;
+    if (!saleId) return;
+
+    await this.queryWithClient(client, `DELETE FROM "SaleItem" WHERE "saleId" = $1`, [saleId]);
+
+    const itemRows = await this.queryWithClient<any>(
+      client,
+      `
+        SELECT
+          oi.product_name,
+          oi.quantity,
+          oi.unit_price,
+          oi.line_total,
+          COALESCE(pv.inventory_item_id, p.inventory_item_id) AS inventory_item_id
+        FROM order_items oi
+        LEFT JOIN products p ON p.id = oi.product_id
+        LEFT JOIN product_variants pv ON pv.id = oi.variant_id
+        WHERE oi.order_id = $1
+        ORDER BY oi.id ASC
+      `,
+      [orderId],
+    );
+
+    for (const item of itemRows) {
+      if (!item.inventory_item_id) {
+        continue;
+      }
+
+      await this.queryWithClient(
+        client,
+        `
+          INSERT INTO "SaleItem" (
+            id, "saleId", "inventoryItemId", name, quantity,
+            "unitPrice", "totalPrice", "createdAt"
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+        `,
+        [
+          randomUUID(),
+          saleId,
+          item.inventory_item_id,
+          item.product_name ?? 'POS item',
+          Number(item.quantity ?? 0),
+          Number(item.unit_price ?? 0),
+          Number(item.line_total ?? Number(item.unit_price ?? 0) * Number(item.quantity ?? 0)),
+        ],
+      );
+    }
+  }
+
+  private async deductRetailProduct(client: PoolClient, storeId: number, orderId: number, orderItemId: number, productId: number, variantId: number, quantity: number) {
+    const variantRows = await this.queryWithClient<{
+      stock_quantity: number;
+      product_id: number;
+      size: string | null;
+      color: string | null;
+      inventory_item_id: string | null;
+      inventory_quantity: string | number | null;
+      inventory_unit: string | null;
+      inventory_location_id: string | null;
+      inventory_business_id: string | null;
+    }>(
+      client,
+      `
+        SELECT
+          pv.stock_quantity,
+          pv.product_id,
+          pv.size,
+          pv.color,
+          COALESCE(pv.inventory_item_id, p.inventory_item_id) AS inventory_item_id,
+          i.quantity AS inventory_quantity,
+          i.unit AS inventory_unit,
+          i."locationId" AS inventory_location_id,
+          i."businessId" AS inventory_business_id
         FROM product_variants pv
         JOIN products p ON p.id = pv.product_id
+        LEFT JOIN "InventoryItem" i ON i.id = COALESCE(pv.inventory_item_id, p.inventory_item_id)
         WHERE pv.id = $1
           AND p.id = $2
           AND p.store_id = $3
@@ -2876,6 +3124,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     );
 
     if (variant.inventory_item_id) {
+      const previousQuantity = Number(variant.inventory_quantity ?? 0);
+      const newQuantity = Math.max(previousQuantity - quantity, 0);
       await this.queryWithClient(
         client,
         `
@@ -2886,6 +3136,24 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         `,
         [quantity, variant.inventory_item_id],
       );
+
+      if (variant.inventory_business_id && variant.inventory_location_id) {
+        await this.recordInventoryStockMovement(client, {
+          type: 'SALE',
+          quantity,
+          previousQuantity,
+          newQuantity,
+          unit: variant.inventory_unit ?? 'pcs',
+          reason: 'POS order sale',
+          referenceType: 'POS_ORDER',
+          referenceId: String(orderId),
+          notes: `Receipt/order ${orderId}`,
+          itemId: variant.inventory_item_id,
+          locationId: variant.inventory_location_id,
+          businessId: variant.inventory_business_id,
+          module: 'RETAIL',
+        });
+      }
     }
 
     await this.queryWithClient(
@@ -2913,7 +3181,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   private async deductRestaurantIngredients(client: PoolClient, storeId: number, orderId: number, orderItemId: number, item: any) {
     const itemQuantity = Number(item.quantity ?? 1);
-    const ingredients = Array.isArray(item.ingredients) ? item.ingredients : [];
+    const ingredients = Array.isArray(item.ingredients) && item.ingredients.length > 0
+      ? item.ingredients
+      : await this.getDefaultOrderItemIngredients(client, storeId, Number(item.productId ?? item.id));
     const finiteNumberOrNull = (value: unknown) => {
       const parsed = Number(value);
       return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -2976,13 +3246,29 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
 
-      const inventoryRows = await this.queryWithClient<{ quantity_available: string | number; unit: string; inventory_item_id: string | null }>(
+      const inventoryRows = await this.queryWithClient<{
+        quantity_available: string | number;
+        unit: string;
+        inventory_item_id: string | null;
+        inventory_quantity: string | number | null;
+        inventory_unit: string | null;
+        inventory_location_id: string | null;
+        inventory_business_id: string | null;
+      }>(
         client,
         `
-          SELECT quantity_available, unit, inventory_item_id
-          FROM ingredients_inventory
-          WHERE id = $1
-            AND store_id = $2
+          SELECT
+            ii.quantity_available,
+            ii.unit,
+            ii.inventory_item_id,
+            inv.quantity AS inventory_quantity,
+            inv.unit AS inventory_unit,
+            inv."locationId" AS inventory_location_id,
+            inv."businessId" AS inventory_business_id
+          FROM ingredients_inventory ii
+          LEFT JOIN "InventoryItem" inv ON inv.id = ii.inventory_item_id
+          WHERE ii.id = $1
+            AND ii.store_id = $2
           FOR UPDATE
         `,
         [ingredientId, storeId],
@@ -3010,6 +3296,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       );
 
       if (inventory.inventory_item_id) {
+        const previousQuantity = Number(inventory.inventory_quantity ?? 0);
+        const newQuantity = Math.max(previousQuantity - quantity, 0);
         await this.queryWithClient(
           client,
           `
@@ -3020,6 +3308,24 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
           `,
           [quantity, inventory.inventory_item_id],
         );
+
+        if (inventory.inventory_business_id && inventory.inventory_location_id) {
+          await this.recordInventoryStockMovement(client, {
+            type: 'RECIPE_CONSUMPTION',
+            quantity,
+            previousQuantity,
+            newQuantity,
+            unit: inventory.inventory_unit ?? ingredient.unit ?? inventory.unit,
+            reason: `POS receipt item: ${item.name ?? 'Menu item'}`,
+            referenceType: 'POS_ORDER',
+            referenceId: String(orderId),
+            notes: `Consumed for receipt/order ${orderId}`,
+            itemId: inventory.inventory_item_id,
+            locationId: inventory.inventory_location_id,
+            businessId: inventory.inventory_business_id,
+            module: 'RESTAURANT',
+          });
+        }
       }
 
       await this.queryWithClient(
@@ -3034,6 +3340,80 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         [storeId, orderId, orderItemId, ingredientId, item.productId ?? item.id ?? null, quantity, ingredient.unit ?? inventory.unit],
       );
     }
+  }
+
+  private async getDefaultOrderItemIngredients(client: PoolClient, storeId: number, productId: number) {
+    if (!Number.isFinite(productId) || productId <= 0) return [];
+
+    return this.queryWithClient<any>(
+      client,
+      `
+        SELECT
+          pi.id AS product_ingredient_id,
+          pi.ingredient_id,
+          pi.ingredient_name AS name,
+          pi.quantity_required AS quantity,
+          pi.quantity_required,
+          pi.unit,
+          pi.additional_cost AS additional_price,
+          FALSE AS removed
+        FROM product_ingredients pi
+        WHERE pi.store_id = $1
+          AND pi.product_id = $2
+          AND COALESCE(pi.is_required, TRUE) = TRUE
+        ORDER BY pi.id ASC
+      `,
+      [storeId, productId],
+    );
+  }
+
+  private async recordInventoryStockMovement(
+    client: PoolClient,
+    input: {
+      type: 'SALE' | 'RECIPE_CONSUMPTION';
+      quantity: number;
+      previousQuantity: number;
+      newQuantity: number;
+      unit?: string | null;
+      reason: string;
+      referenceType: string;
+      referenceId: string;
+      notes: string;
+      itemId: string;
+      locationId: string;
+      businessId: string;
+      module: 'RETAIL' | 'RESTAURANT';
+    },
+  ) {
+    await this.queryWithClient(
+      client,
+      `
+        INSERT INTO "StockMovement" (
+          id, type, quantity, "previousQuantity", "newQuantity", unit,
+          reason, "referenceType", "referenceId", notes, "itemId",
+          "locationId", "businessId", module
+        )
+        VALUES ($1, $2::"StockMovementType", $3, $4, $5, $6,
+          $7, $8, $9, $10, $11,
+          $12, $13, $14::"BusinessModule")
+      `,
+      [
+        randomUUID(),
+        input.type,
+        input.quantity,
+        input.previousQuantity,
+        input.newQuantity,
+        input.unit ?? null,
+        input.reason,
+        input.referenceType,
+        input.referenceId,
+        input.notes,
+        input.itemId,
+        input.locationId,
+        input.businessId,
+        input.module,
+      ],
+    );
   }
 
   private async createUniqueOrderNumber(client: PoolClient, requestedOrderNumber: unknown) {

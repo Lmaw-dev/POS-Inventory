@@ -56,8 +56,10 @@ export function OrderList({ onNavigate, onLogout, isAdmin = false, storeBrand, u
   const [currentPage, setCurrentPage] = useState(1);
   const [isCompletingPayment, setIsCompletingPayment] = useState(false);
   const showTableManagementColumns = settings.enable_table_management;
+  const canProcessTransactions = !isAdmin && (staffType === 'POS_STAFF' || !staffType);
 
   const openModal = (order: Order, modal: ActiveModal) => {
+    if ((modal === 'payment' || modal === 'refund' || modal === 'void') && !canProcessTransactions) return;
     if (modal === 'refund' && !settings.enable_refund) return;
     if (modal === 'void' && !settings.enable_void) return;
     setSelectedOrder(order);
@@ -74,6 +76,7 @@ export function OrderList({ onNavigate, onLogout, isAdmin = false, storeBrand, u
   };
 
   const handleConfirmPayment = async () => {
+    if (!canProcessTransactions) return;
     if (!selectedOrder) return;
     const cash = parseFloat(cashReceived);
     if (cash < selectedOrder.amountNumber) return;
@@ -105,12 +108,14 @@ export function OrderList({ onNavigate, onLogout, isAdmin = false, storeBrand, u
   };
 
   const handleRefundSubmit = () => {
+    if (!canProcessTransactions) return;
     if (!settings.enable_refund) return;
     if (!selectedOrder || !refundReason.trim()) return;
     setRefundingOrder(selectedOrder);
   };
 
   const handleVoidSubmit = () => {
+    if (!canProcessTransactions) return;
     if (!settings.enable_void) return;
     if (!selectedOrder || !voidReason.trim()) return;
     setVoidingOrder(selectedOrder);
@@ -369,7 +374,7 @@ export function OrderList({ onNavigate, onLogout, isAdmin = false, storeBrand, u
                         </button>
 
                         {/* Process Payment - only if Not Paid */}
-                        {order.paymentStatus === 'Not Paid' && (
+                        {canProcessTransactions && order.paymentStatus === 'Not Paid' && (
                           <button
                             onClick={() => openModal(order, 'payment')}
                             title="Process Payment"
@@ -393,7 +398,7 @@ export function OrderList({ onNavigate, onLogout, isAdmin = false, storeBrand, u
                         )}
 
                         {/* Refund - only if Paid */}
-                        {settings.enable_refund && order.paymentStatus === 'Paid' && (
+                        {canProcessTransactions && settings.enable_refund && order.paymentStatus === 'Paid' && (
                           <button
                             onClick={() => openModal(order, 'refund')}
                             title="Process Refund"
@@ -404,7 +409,7 @@ export function OrderList({ onNavigate, onLogout, isAdmin = false, storeBrand, u
                           </button>
                         )}
 
-                        {settings.enable_void && order.paymentStatus === 'Paid' && (
+                        {canProcessTransactions && settings.enable_void && order.paymentStatus === 'Paid' && (
                           <button
                             onClick={() => openModal(order, 'void')}
                             title="Void Transaction"
@@ -580,7 +585,7 @@ export function OrderList({ onNavigate, onLogout, isAdmin = false, storeBrand, u
       )}
 
       {/* ── MODAL: Payment ── */}
-      {activeModal === 'payment' && selectedOrder && (
+      {canProcessTransactions && activeModal === 'payment' && selectedOrder && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col">
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
@@ -805,7 +810,7 @@ export function OrderList({ onNavigate, onLogout, isAdmin = false, storeBrand, u
       )}
 
       {/* ── MODAL: Refund ── */}
-      {activeModal === 'refund' && selectedOrder && (
+      {canProcessTransactions && activeModal === 'refund' && selectedOrder && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col">
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
@@ -868,7 +873,7 @@ export function OrderList({ onNavigate, onLogout, isAdmin = false, storeBrand, u
           </div>
         </div>
       )}
-      {activeModal === 'void' && selectedOrder && (
+      {canProcessTransactions && activeModal === 'void' && selectedOrder && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col">
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100">
@@ -931,6 +936,7 @@ export function OrderList({ onNavigate, onLogout, isAdmin = false, storeBrand, u
           </div>
         </div>
       )}
+      {canProcessTransactions && (
       <DeleteConfirmDialog
         isOpen={Boolean(refundingOrder)}
         title="Confirm Delete"
@@ -943,6 +949,8 @@ export function OrderList({ onNavigate, onLogout, isAdmin = false, storeBrand, u
           closeModal();
         }}
       />
+      )}
+      {canProcessTransactions && (
       <DeleteConfirmDialog
         isOpen={Boolean(voidingOrder)}
         title="Confirm Void"
@@ -958,10 +966,10 @@ export function OrderList({ onNavigate, onLogout, isAdmin = false, storeBrand, u
             .catch((error) => {
               alert(error instanceof Error ? error.message : 'Unable to void order.');
               setVoidingOrder(null);
-            });
+          });
         }}
       />
+      )}
     </div>
   );
 }
-

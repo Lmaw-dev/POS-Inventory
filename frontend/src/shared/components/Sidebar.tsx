@@ -162,7 +162,7 @@ export function Sidebar({ currentPage, onNavigate, onLogout, isAdmin = false, st
         </div>
       </div>
 
-      <nav className={`min-h-0 flex-1 overflow-y-auto py-3 transition-all duration-300 ease-in-out ${isCollapsed ? 'px-3' : 'px-5'}`}>
+      <nav className={`min-h-0 flex-1 overflow-y-auto py-3 transition-all duration-300 ease-in-out [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${isCollapsed ? 'px-3' : 'px-5'}`}>
         <ul className="space-y-0.5">
           {visibleMenuItems.map((item) => {
             const childActive = item.children?.some((child) => child.page === currentPage) ?? false;

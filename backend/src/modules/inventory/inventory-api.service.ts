@@ -761,8 +761,14 @@ export class InventoryApiService {
     const scope = await this.resolveScope(headers);
     const rows = await this.safeQuery<Record<string, unknown>>(
       `
-        SELECT s.*, COALESCE(items.items, '[]'::json) AS items
+        SELECT
+          s.*,
+          row_to_json(cashier.*) AS cashier,
+          row_to_json(location.*) AS location,
+          COALESCE(items.items, '[]'::json) AS items
         FROM "Sale" s
+        LEFT JOIN "User" cashier ON cashier.id = s."cashierId"
+        LEFT JOIN "Location" location ON location.id = s."locationId"
         LEFT JOIN LATERAL (
           SELECT json_agg(si.* ORDER BY si."createdAt") AS items
           FROM "SaleItem" si

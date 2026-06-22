@@ -85,17 +85,20 @@ export default function App() {
   const [storeBrand, setStoreBrand] = useState<StoreBrand>({ name: null, logo: null });
 
   useEffect(() => {
-    const savedUser = window.localStorage.getItem(SESSION_USER_KEY);
+    window.localStorage.removeItem(SESSION_USER_KEY);
+    window.localStorage.removeItem(SESSION_PAGE_KEY);
+
+    const savedUser = window.sessionStorage.getItem(SESSION_USER_KEY);
     if (!savedUser) return;
 
     try {
       const parsedUser = JSON.parse(savedUser) as AuthenticatedUser;
-      const savedPage = window.localStorage.getItem(SESSION_PAGE_KEY) as Page | null;
+      const savedPage = window.sessionStorage.getItem(SESSION_PAGE_KEY) as Page | null;
       setCurrentUser(parsedUser);
       setCurrentPage(savedPage && savedPage !== 'login' && canAccessPage(parsedUser, savedPage) ? savedPage : getDefaultPageForUser(parsedUser));
     } catch {
-      window.localStorage.removeItem(SESSION_USER_KEY);
-      window.localStorage.removeItem(SESSION_PAGE_KEY);
+      window.sessionStorage.removeItem(SESSION_USER_KEY);
+      window.sessionStorage.removeItem(SESSION_PAGE_KEY);
     }
   }, []);
 
@@ -137,13 +140,13 @@ export default function App() {
   useEffect(() => {
     if (isInventoryPage(currentPage) && !INVENTORY_MODULES_ENABLED) {
       setCurrentPage(currentUser ? getDefaultPageForUser(currentUser) : 'login');
-      window.localStorage.removeItem(SESSION_PAGE_KEY);
+      window.sessionStorage.removeItem(SESSION_PAGE_KEY);
     }
   }, [currentPage, currentUser]);
 
   const handleLogin = (user: AuthenticatedUser) => {
     setCurrentUser(user);
-    window.localStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
+    window.sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
 
     if (user.role === 'SUPERADMIN') {
       navigateTo('superadmin-dashboard');
@@ -176,6 +179,8 @@ export default function App() {
   const handleLogout = () => {
     window.localStorage.removeItem(SESSION_USER_KEY);
     window.localStorage.removeItem(SESSION_PAGE_KEY);
+    window.sessionStorage.removeItem(SESSION_USER_KEY);
+    window.sessionStorage.removeItem(SESSION_PAGE_KEY);
     setCurrentUser(null);
     setCurrentPage('login');
     setCurrentOrder(null);
@@ -191,10 +196,14 @@ export default function App() {
       page = currentUser ? getDefaultPageForUser(currentUser) : 'login';
     }
 
+    if (currentUser && !canAccessPage(currentUser, page)) {
+      page = getDefaultPageForUser(currentUser);
+    }
+
     if (page === 'login') {
-      window.localStorage.removeItem(SESSION_PAGE_KEY);
+      window.sessionStorage.removeItem(SESSION_PAGE_KEY);
     } else {
-      window.localStorage.setItem(SESSION_PAGE_KEY, page);
+      window.sessionStorage.setItem(SESSION_PAGE_KEY, page);
     }
     setCurrentPage(page);
   };
@@ -362,7 +371,9 @@ function canAccessPage(user: AuthenticatedUser, page: Page) {
 
   if (page === 'login') return true;
   if (user.role === 'SUPERADMIN') return page === 'superadmin-dashboard';
-  if (user.role === 'ADMIN') return page !== 'superadmin-dashboard';
+  if (user.role === 'ADMIN') {
+    return page !== 'superadmin-dashboard' && !['create-order', 'payment', 'retail-sales'].includes(page);
+  }
 
   if (user.staff_type === 'INVENTORY_STAFF') {
     return isInventoryPage(page);
