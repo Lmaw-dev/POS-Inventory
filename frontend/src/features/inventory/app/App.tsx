@@ -12,6 +12,7 @@ import {
   Receipt,
   Settings2,
   ShoppingCart,
+  SlidersHorizontal,
   Store,
   Users,
   UtensilsCrossed,
@@ -29,6 +30,7 @@ const PurchaseOrdersView = lazy(() => import('../modules/retail/PurchaseOrdersVi
 const ProductManagementView = lazy(() => import('../modules/retail/ProductManagementView'));
 const POSView = lazy(() => import('../modules/retail/POSView'));
 const SalesHistoryView = lazy(() => import('../modules/retail/SalesHistoryView'));
+const StockAdjustmentsView = lazy(() => import('../modules/retail/StockAdjustmentsView'));
 const DashboardView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.DashboardView })));
 const StockAlertsView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.StockAlertsView })));
 const InventoryView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.InventoryView })));
@@ -45,6 +47,7 @@ const RestaurantGoodsReceived = lazy(() => import('../modules/restaurant/GoodsRe
 const RestaurantPOSKitchenOrders = lazy(() => import('../modules/restaurant/POSKitchenOrders').then(m => ({ default: m.POSKitchenOrders })));
 const RestaurantRecipeBOM = lazy(() => import('../modules/restaurant/RecipeBOM').then(m => ({ default: m.RecipeBOM })));
 const RestaurantTransfers = lazy(() => import('../modules/restaurant/Transfers').then(m => ({ default: m.Transfers })));
+const RestaurantStockAdjustments = lazy(() => import('../modules/restaurant/StockAdjustments').then(m => ({ default: m.StockAdjustments })));
 const RestaurantReports = lazy(() => import('../modules/restaurant/Reports').then(m => ({ default: m.Reports })));
 const RestaurantMultiLocation = lazy(() => import('../modules/restaurant/MultiLocation').then(m => ({ default: m.MultiLocation })));
 const RestaurantUserManagement = lazy(() => import('../modules/restaurant/UserManagement').then(m => ({ default: m.UserManagement })));
@@ -160,6 +163,8 @@ export default function App() {
           return <RestaurantRecipeBOM />;
         case 'restaurant-transfers':
           return <RestaurantTransfers />;
+        case 'restaurant-stock-adjustments':
+          return <RestaurantStockAdjustments />;
         case 'restaurant-multilocation':
           return <RestaurantMultiLocation />;
         case 'restaurant-reports':
@@ -270,6 +275,10 @@ export default function App() {
                 <TransfersIcon />
                 Transfers
               </NavButton>
+              <NavButton active={currentView === 'stock-adjustments'} onClick={() => navigateToView('stock-adjustments')}>
+                <StockAdjustmentsIcon />
+                Stock Adjustments
+              </NavButton>
               <NavButton active={currentView === 'multilocation'} onClick={() => navigateToView('multilocation')}>
                 <MultilocationIcon />
                 Multilocation
@@ -341,6 +350,7 @@ export default function App() {
             {currentView === 'products-received' && <ProductsReceivedView currentUser={currentUser} />}
             {currentView === 'item-bundling' && <ItemBundlingView currentUser={currentUser} />}
             {currentView === 'transfers' && <TransfersView currentUser={currentUser} />}
+            {currentView === 'stock-adjustments' && <StockAdjustmentsView currentUser={currentUser} />}
             {currentView === 'multilocation' && <MultilocationView />}
             {currentView === 'reports' && (
               <ReportsView />
@@ -382,6 +392,7 @@ const ProductsReceivedIcon = () => <PackageCheck className="size-5" />;
 const ItemBundlingIcon = () => <Layers className="size-5" />;
 const SalesHistoryIcon = () => <Receipt className="size-5" />;
 const TransfersIcon = () => <ArrowRightLeft className="size-5" />;
+const StockAdjustmentsIcon = () => <SlidersHorizontal className="size-5" />;
 const MultilocationIcon = () => <MapPin className="size-5" />;
 const ReportsIcon = () => <FileText className="size-5" />;
 const UserManagementIcon = () => <Users className="size-5" />;

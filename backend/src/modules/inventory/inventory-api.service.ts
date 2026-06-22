@@ -1,10 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { randomUUID } from 'crypto';
-import { QueryResultRow } from 'pg';
-import { DatabaseService } from '../../shared/database/database.service';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { randomUUID } from "crypto";
+import { QueryResultRow } from "pg";
+import { DatabaseService } from "../../shared/database/database.service";
 
 type HeadersLike = Record<string, string | string[] | undefined>;
-type BusinessModule = 'RETAIL' | 'RESTAURANT';
+type BusinessModule = "RETAIL" | "RESTAURANT";
 
 type Scope = {
   businessId: string;
@@ -38,7 +43,10 @@ export class InventoryApiService {
     return { user: scope.user };
   }
 
-  async listInventory(headers: HeadersLike, query: Record<string, string | undefined>) {
+  async listInventory(
+    headers: HeadersLike,
+    query: Record<string, string | undefined>,
+  ) {
     const scope = await this.resolveScope(headers);
     const where = ['i."businessId" = $1'];
     const params: unknown[] = [scope.businessId];
@@ -50,7 +58,9 @@ export class InventoryApiService {
 
     if (query.search) {
       params.push(`%${query.search}%`);
-      where.push(`(i.name ILIKE $${params.length} OR i.sku ILIKE $${params.length} OR i.barcode ILIKE $${params.length})`);
+      where.push(
+        `(i.name ILIKE $${params.length} OR i.sku ILIKE $${params.length} OR i.barcode ILIKE $${params.length})`,
+      );
     }
 
     const rows = await this.safeQuery<Record<string, unknown>>(
@@ -72,7 +82,7 @@ export class InventoryApiService {
           ) AS location
         FROM "InventoryItem" i
         LEFT JOIN "Location" l ON l.id = i."locationId"
-        WHERE ${where.join(' AND ')}
+        WHERE ${where.join(" AND ")}
         ORDER BY i."createdAt" DESC
       `,
       params,
@@ -81,9 +91,14 @@ export class InventoryApiService {
     return this.paged(rows);
   }
 
-  async createInventoryItem(headers: HeadersLike, body: Record<string, unknown>) {
+  async createInventoryItem(
+    headers: HeadersLike,
+    body: Record<string, unknown>,
+  ) {
     const scope = await this.resolveScope(headers);
-    const locationId = String(body.locationId ?? (await this.getDefaultLocationId(scope.businessId)));
+    const locationId = String(
+      body.locationId ?? (await this.getDefaultLocationId(scope.businessId)),
+    );
     const id = randomUUID();
 
     const rows = await this.safeQuery<Record<string, unknown>>(
@@ -104,12 +119,12 @@ export class InventoryApiService {
       `,
       [
         id,
-        String(body.name ?? 'Untitled Item'),
+        String(body.name ?? "Untitled Item"),
         body.description ?? null,
-        String(body.itemType ?? 'RETAIL_ITEM'),
+        String(body.itemType ?? "RETAIL_ITEM"),
         body.sku ?? null,
         body.barcode ?? null,
-        String(body.category ?? 'Uncategorized'),
+        String(body.category ?? "Uncategorized"),
         body.targetCustomer ?? null,
         body.subcategory ?? null,
         body.size ?? null,
@@ -182,7 +197,7 @@ export class InventoryApiService {
       ],
     );
 
-    if (!rows[0]) throw new NotFoundException('Inventory item was not found.');
+    if (!rows[0]) throw new NotFoundException("Inventory item was not found.");
     await this.syncInventoryItemToPos(id);
     return rows[0];
   }
@@ -243,7 +258,7 @@ export class InventoryApiService {
       `,
       [
         randomUUID(),
-        String(body.name ?? 'Uncategorized'),
+        String(body.name ?? "Uncategorized"),
         body.description ?? null,
         String(body.module ?? scope.module),
         scope.businessId,
@@ -252,7 +267,10 @@ export class InventoryApiService {
     return rows[0];
   }
 
-  async listRecipes(headers: HeadersLike, query: Record<string, string | undefined>) {
+  async listRecipes(
+    headers: HeadersLike,
+    query: Record<string, string | undefined>,
+  ) {
     const scope = await this.resolveScope(headers);
     const rows = await this.safeQuery<Record<string, unknown>>(
       `
@@ -290,24 +308,33 @@ export class InventoryApiService {
 
   async createRecipe(headers: HeadersLike, body: Record<string, unknown>) {
     const scope = await this.resolveScope(headers);
-    if (scope.module !== 'RESTAURANT') {
-      throw new BadRequestException('Recipes are only available for restaurant businesses.');
+    if (scope.module !== "RESTAURANT") {
+      throw new BadRequestException(
+        "Recipes are only available for restaurant businesses.",
+      );
     }
     return this.saveRecipe(scope, undefined, body);
   }
 
-  async updateRecipe(headers: HeadersLike, id: string, body: Record<string, unknown>) {
+  async updateRecipe(
+    headers: HeadersLike,
+    id: string,
+    body: Record<string, unknown>,
+  ) {
     const scope = await this.resolveScope(headers);
     return this.saveRecipe(scope, id, body);
   }
 
   async deleteRecipe(headers: HeadersLike, id: string) {
     const scope = await this.resolveScope(headers);
-    const rows = await this.safeQuery<{ id: string; menuItemId: string | null }>(
+    const rows = await this.safeQuery<{
+      id: string;
+      menuItemId: string | null;
+    }>(
       `DELETE FROM "Recipe" WHERE id = $1 AND "businessId" = $2 RETURNING id, "menuItemId"`,
       [id, scope.businessId],
     );
-    if (!rows[0]) throw new NotFoundException('Recipe was not found.');
+    if (!rows[0]) throw new NotFoundException("Recipe was not found.");
 
     if (rows[0].menuItemId) {
       await this.safeQuery(
@@ -322,29 +349,42 @@ export class InventoryApiService {
     return rows[0];
   }
 
-  private async saveRecipe(scope: Scope, recipeId: string | undefined, body: Record<string, unknown>) {
-    const ingredients = Array.isArray(body.ingredients) ? body.ingredients as Record<string, unknown>[] : [];
-    if (!String(body.name ?? '').trim() || !String(body.category ?? '').trim()) {
-      throw new BadRequestException('Recipe name and category are required.');
+  private async saveRecipe(
+    scope: Scope,
+    recipeId: string | undefined,
+    body: Record<string, unknown>,
+  ) {
+    const ingredients = Array.isArray(body.ingredients)
+      ? (body.ingredients as Record<string, unknown>[])
+      : [];
+    if (
+      !String(body.name ?? "").trim() ||
+      !String(body.category ?? "").trim()
+    ) {
+      throw new BadRequestException("Recipe name and category are required.");
     }
     if (ingredients.length === 0) {
-      throw new BadRequestException('A recipe must have at least one ingredient.');
+      throw new BadRequestException(
+        "A recipe must have at least one ingredient.",
+      );
     }
 
     const defaultLocationId = await this.getDefaultLocationId(scope.businessId);
-    const result = await this.databaseService.withTransaction(async (client) => {
-      const current = recipeId
-        ? await client.query<{ menuItemId: string | null }>(
-            `SELECT "menuItemId" FROM "Recipe" WHERE id = $1 AND "businessId" = $2`,
-            [recipeId, scope.businessId],
-          )
-        : null;
-      if (recipeId && !current?.rows[0]) throw new NotFoundException('Recipe was not found.');
+    const result = await this.databaseService.withTransaction(
+      async (client) => {
+        const current = recipeId
+          ? await client.query<{ menuItemId: string | null }>(
+              `SELECT "menuItemId" FROM "Recipe" WHERE id = $1 AND "businessId" = $2`,
+              [recipeId, scope.businessId],
+            )
+          : null;
+        if (recipeId && !current?.rows[0])
+          throw new NotFoundException("Recipe was not found.");
 
-      const menuItemId = current?.rows[0]?.menuItemId ?? randomUUID();
-      const locationId = String(body.locationId ?? defaultLocationId);
-      await client.query(
-        `
+        const menuItemId = current?.rows[0]?.menuItemId ?? randomUUID();
+        const locationId = String(body.locationId ?? defaultLocationId);
+        await client.query(
+          `
           INSERT INTO "InventoryItem" (
             id, name, description, "itemType", category, quantity, price, "imageUrl",
             unit, "locationId", "businessId", "updatedAt"
@@ -357,21 +397,21 @@ export class InventoryApiService {
             "imageUrl" = EXCLUDED."imageUrl",
             "updatedAt" = CURRENT_TIMESTAMP
         `,
-        [
-          menuItemId,
-          String(body.name).trim(),
-          body.description ?? null,
-          String(body.category).trim(),
-          Number(body.sellingPrice ?? 0),
-          body.imageUrl ?? null,
-          locationId,
-          scope.businessId,
-        ],
-      );
+          [
+            menuItemId,
+            String(body.name).trim(),
+            body.description ?? null,
+            String(body.category).trim(),
+            Number(body.sellingPrice ?? 0),
+            body.imageUrl ?? null,
+            locationId,
+            scope.businessId,
+          ],
+        );
 
-      const savedId = recipeId ?? randomUUID();
-      const recipeRows = await client.query<Record<string, unknown>>(
-        `
+        const savedId = recipeId ?? randomUUID();
+        const recipeRows = await client.query<Record<string, unknown>>(
+          `
           INSERT INTO "Recipe" (
             id, name, category, servings, "yieldPercentage", "prepTimeMinutes",
             instructions, "targetFoodCost", "sellingPrice", "isActive", "imageUrl",
@@ -386,46 +426,94 @@ export class InventoryApiService {
             "menuItemId" = EXCLUDED."menuItemId", "updatedAt" = CURRENT_TIMESTAMP
           RETURNING *
         `,
-        [
-          savedId, String(body.name).trim(), String(body.category).trim(), Number(body.servings ?? 1),
-          Number(body.yieldPercentage ?? 100), body.prepTimeMinutes == null ? null : Number(body.prepTimeMinutes),
-          body.instructions ?? null, body.targetFoodCost == null ? null : Number(body.targetFoodCost),
-          body.sellingPrice == null ? null : Number(body.sellingPrice), body.isActive !== false,
-          body.imageUrl ?? null, JSON.stringify(body.modifiers ?? []), menuItemId, scope.businessId,
-        ],
-      );
-
-      await client.query(`DELETE FROM "RecipeIngredient" WHERE "recipeId" = $1`, [savedId]);
-      for (const ingredient of ingredients) {
-        const itemId = String(ingredient.itemId ?? '');
-        if (!itemId) throw new BadRequestException('Every recipe ingredient must link to an inventory item.');
-        const quantity = Number(ingredient.quantity ?? 0);
-        const unitCost = ingredient.unitCost == null ? null : Number(ingredient.unitCost);
-        await client.query(
-          `INSERT INTO "RecipeIngredient" (id, "recipeId", "itemId", quantity, unit, "unitCost", "totalCost", "updatedAt")
-           VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_TIMESTAMP)`,
-          [randomUUID(), savedId, itemId, quantity, ingredient.unit ?? null, unitCost, unitCost == null ? null : quantity * unitCost],
+          [
+            savedId,
+            String(body.name).trim(),
+            String(body.category).trim(),
+            Number(body.servings ?? 1),
+            Number(body.yieldPercentage ?? 100),
+            body.prepTimeMinutes == null ? null : Number(body.prepTimeMinutes),
+            body.instructions ?? null,
+            body.targetFoodCost == null ? null : Number(body.targetFoodCost),
+            body.sellingPrice == null ? null : Number(body.sellingPrice),
+            body.isActive !== false,
+            body.imageUrl ?? null,
+            JSON.stringify(body.modifiers ?? []),
+            menuItemId,
+            scope.businessId,
+          ],
         );
-      }
-      return { recipe: recipeRows.rows[0], menuItemId, recipeId: savedId };
-    });
 
-    await this.syncInventoryItemToPos(result.menuItemId, result.recipeId, body.isActive !== false);
+        await client.query(
+          `DELETE FROM "RecipeIngredient" WHERE "recipeId" = $1`,
+          [savedId],
+        );
+        for (const ingredient of ingredients) {
+          const itemId = String(ingredient.itemId ?? "");
+          if (!itemId)
+            throw new BadRequestException(
+              "Every recipe ingredient must link to an inventory item.",
+            );
+          const quantity = Number(ingredient.quantity ?? 0);
+          const unitCost =
+            ingredient.unitCost == null ? null : Number(ingredient.unitCost);
+          await client.query(
+            `INSERT INTO "RecipeIngredient" (id, "recipeId", "itemId", quantity, unit, "unitCost", "totalCost", "updatedAt")
+           VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_TIMESTAMP)`,
+            [
+              randomUUID(),
+              savedId,
+              itemId,
+              quantity,
+              ingredient.unit ?? null,
+              unitCost,
+              unitCost == null ? null : quantity * unitCost,
+            ],
+          );
+        }
+        return { recipe: recipeRows.rows[0], menuItemId, recipeId: savedId };
+      },
+    );
+
+    await this.syncInventoryItemToPos(
+      result.menuItemId,
+      result.recipeId,
+      body.isActive !== false,
+    );
     return result.recipe;
   }
 
   /** Keep the inventory catalog and the numeric-ID POS compatibility catalog in lockstep. */
-  private async syncInventoryItemToPos(itemId: string, recipeId?: string, isAvailable = true) {
+  private async syncInventoryItemToPos(
+    itemId: string,
+    recipeId?: string,
+    isAvailable = true,
+  ) {
     await this.databaseService.withTransaction(async (client) => {
       const itemResult = await client.query<{
-        id: string; businessId: string; itemType: string; name: string; description: string | null;
-        category: string; price: number; imageUrl: string | null; sku: string | null; barcode: string | null;
-        unit: string | null; size: string | null; quantity: number; minStock: number | null;
+        id: string;
+        businessId: string;
+        itemType: string;
+        name: string;
+        description: string | null;
+        category: string;
+        price: number;
+        imageUrl: string | null;
+        sku: string | null;
+        barcode: string | null;
+        unit: string | null;
+        size: string | null;
+        quantity: number;
+        minStock: number | null;
       }>(`SELECT * FROM "InventoryItem" WHERE id = $1`, [itemId]);
       const item = itemResult.rows[0];
-      if (!item || !['RETAIL_ITEM', 'MENU_ITEM'].includes(item.itemType)) return;
+      if (!item || !["RETAIL_ITEM", "MENU_ITEM"].includes(item.itemType))
+        return;
 
-      const storeResult = await client.query<{ id: number; store_type: string }>(
+      const storeResult = await client.query<{
+        id: number;
+        store_type: string;
+      }>(
         `
           SELECT s.id, CASE WHEN s.store_type = 'RETAIL' THEN 'RETAIL_STORE' ELSE s.store_type END AS store_type
           FROM stores s
@@ -452,10 +540,14 @@ export class InventoryApiService {
         `,
         [store.id, store.store_type, item.category],
       );
-      const existingCategory = categoryResult.rows[0] ?? (await client.query<{ id: number }>(
-        `SELECT id FROM product_categories WHERE store_id = $1 AND store_type = $2::varchar AND lower(name) = lower($3::text) LIMIT 1`,
-        [store.id, store.store_type, item.category],
-      )).rows[0];
+      const existingCategory =
+        categoryResult.rows[0] ??
+        (
+          await client.query<{ id: number }>(
+            `SELECT id FROM product_categories WHERE store_id = $1 AND store_type = $2::varchar AND lower(name) = lower($3::text) LIMIT 1`,
+            [store.id, store.store_type, item.category],
+          )
+        ).rows[0];
 
       const productResult = await client.query<{ id: number }>(
         `
@@ -471,13 +563,27 @@ export class InventoryApiService {
             is_available = EXCLUDED.is_available, updated_at = CURRENT_TIMESTAMP
           RETURNING id
         `,
-        [store.id, existingCategory?.id ?? null, store.store_type, item.name, item.description, item.price,
-          item.imageUrl, item.sku, item.barcode, item.unit, item.size, Math.floor(Number(item.quantity ?? 0)), Math.floor(Number(item.minStock ?? 0)),
-          isAvailable, item.id],
+        [
+          store.id,
+          existingCategory?.id ?? null,
+          store.store_type,
+          item.name,
+          item.description,
+          item.price,
+          item.imageUrl,
+          item.sku,
+          item.barcode,
+          item.unit,
+          item.size,
+          Math.floor(Number(item.quantity ?? 0)),
+          Math.floor(Number(item.minStock ?? 0)),
+          isAvailable,
+          item.id,
+        ],
       );
       const productId = productResult.rows[0].id;
 
-      if (item.itemType === 'RETAIL_ITEM') {
+      if (item.itemType === "RETAIL_ITEM") {
         await client.query(
           `
             INSERT INTO product_variants (
@@ -490,10 +596,24 @@ export class InventoryApiService {
               stock_quantity = EXCLUDED.stock_quantity, low_stock_limit = EXCLUDED.low_stock_limit,
               is_active = EXCLUDED.is_active, updated_at = CURRENT_TIMESTAMP
           `,
-          [productId, item.size, item.sku, item.barcode, item.imageUrl, item.price, Math.floor(Number(item.quantity ?? 0)), Math.floor(Number(item.minStock ?? 0)), isAvailable, item.id],
+          [
+            productId,
+            item.size,
+            item.sku,
+            item.barcode,
+            item.imageUrl,
+            item.price,
+            Math.floor(Number(item.quantity ?? 0)),
+            Math.floor(Number(item.minStock ?? 0)),
+            isAvailable,
+            item.id,
+          ],
         );
       } else if (recipeId) {
-        await client.query(`DELETE FROM product_ingredients WHERE product_id = $1`, [productId]);
+        await client.query(
+          `DELETE FROM product_ingredients WHERE product_id = $1`,
+          [productId],
+        );
         await client.query(
           `
             INSERT INTO product_ingredients (
@@ -513,7 +633,10 @@ export class InventoryApiService {
     });
   }
 
-  async listKitchenOrders(headers: HeadersLike, query: Record<string, string | undefined>) {
+  async listKitchenOrders(
+    headers: HeadersLike,
+    query: Record<string, string | undefined>,
+  ) {
     const scope = await this.resolveScope(headers);
     const rows = await this.safeQuery<Record<string, unknown>>(
       `
@@ -535,7 +658,10 @@ export class InventoryApiService {
     return this.paged(rows);
   }
 
-  async listSuppliers(headers: HeadersLike, query: Record<string, string | undefined>) {
+  async listSuppliers(
+    headers: HeadersLike,
+    query: Record<string, string | undefined>,
+  ) {
     const scope = await this.resolveScope(headers);
     const rows = await this.safeQuery<Record<string, unknown>>(
       `
@@ -551,7 +677,10 @@ export class InventoryApiService {
     return this.paged(rows);
   }
 
-  async listPurchaseOrders(headers: HeadersLike, query: Record<string, string | undefined>) {
+  async listPurchaseOrders(
+    headers: HeadersLike,
+    query: Record<string, string | undefined>,
+  ) {
     const scope = await this.resolveScope(headers);
     const rows = await this.safeQuery<Record<string, unknown>>(
       `
@@ -576,7 +705,10 @@ export class InventoryApiService {
     return this.paged(rows);
   }
 
-  async listGoodsReceipts(headers: HeadersLike, query: Record<string, string | undefined>) {
+  async listGoodsReceipts(
+    headers: HeadersLike,
+    query: Record<string, string | undefined>,
+  ) {
     const scope = await this.resolveScope(headers);
     const rows = await this.safeQuery<Record<string, unknown>>(
       `
@@ -592,12 +724,19 @@ export class InventoryApiService {
           AND ($3::text IS NULL OR gr."purchaseOrderId" = $3)
         ORDER BY gr."createdAt" DESC
       `,
-      [scope.businessId, query.module ?? scope.module, query.purchaseOrderId ?? null],
+      [
+        scope.businessId,
+        query.module ?? scope.module,
+        query.purchaseOrderId ?? null,
+      ],
     );
     return this.paged(rows);
   }
 
-  async listTransfers(headers: HeadersLike, query: Record<string, string | undefined>) {
+  async listTransfers(
+    headers: HeadersLike,
+    query: Record<string, string | undefined>,
+  ) {
     const scope = await this.resolveScope(headers);
     const rows = await this.safeQuery<Record<string, unknown>>(
       `
@@ -615,7 +754,10 @@ export class InventoryApiService {
     return this.paged(rows);
   }
 
-  async listSales(headers: HeadersLike, query: Record<string, string | undefined>) {
+  async listSales(
+    headers: HeadersLike,
+    query: Record<string, string | undefined>,
+  ) {
     const scope = await this.resolveScope(headers);
     const rows = await this.safeQuery<Record<string, unknown>>(
       `
@@ -635,7 +777,10 @@ export class InventoryApiService {
     return this.paged(rows);
   }
 
-  async listStockMovements(headers: HeadersLike, query: Record<string, string | undefined>) {
+  async listStockMovements(
+    headers: HeadersLike,
+    query: Record<string, string | undefined>,
+  ) {
     const scope = await this.resolveScope(headers);
     const rows = await this.safeQuery<Record<string, unknown>>(
       `
@@ -653,7 +798,10 @@ export class InventoryApiService {
     return this.paged(rows);
   }
 
-  async createStockMovement(headers: HeadersLike, body: Record<string, unknown>) {
+  async createStockMovement(
+    headers: HeadersLike,
+    body: Record<string, unknown>,
+  ) {
     const scope = await this.resolveScope(headers);
     const rows = await this.safeQuery<Record<string, unknown>>(
       `
@@ -667,7 +815,7 @@ export class InventoryApiService {
       `,
       [
         randomUUID(),
-        String(body.type ?? 'ADJUSTMENT'),
+        String(body.type ?? "ADJUSTMENT"),
         Number(body.quantity ?? 0),
         Number(body.previousQuantity ?? 0),
         Number(body.newQuantity ?? body.quantity ?? 0),
@@ -676,8 +824,11 @@ export class InventoryApiService {
         body.referenceType ?? null,
         body.referenceId ?? null,
         body.notes ?? null,
-        String(body.itemId ?? ''),
-        String(body.locationId ?? (await this.getDefaultLocationId(scope.businessId))),
+        String(body.itemId ?? ""),
+        String(
+          body.locationId ??
+            (await this.getDefaultLocationId(scope.businessId)),
+        ),
         scope.businessId,
         String(body.module ?? scope.module),
         scope.user.id,
@@ -686,7 +837,10 @@ export class InventoryApiService {
     return rows[0];
   }
 
-  async listBundles(headers: HeadersLike, query: Record<string, string | undefined>) {
+  async listBundles(
+    headers: HeadersLike,
+    query: Record<string, string | undefined>,
+  ) {
     const scope = await this.resolveScope(headers);
     const rows = await this.safeQuery<Record<string, unknown>>(
       `
@@ -706,20 +860,352 @@ export class InventoryApiService {
     return this.paged(rows);
   }
 
-  async listAdjustments(headers: HeadersLike, query: Record<string, string | undefined>) {
+  async listAdjustments(
+    headers: HeadersLike,
+    query: Record<string, string | undefined>,
+  ) {
     const scope = await this.resolveScope(headers);
     const rows = await this.safeQuery<Record<string, unknown>>(
       `
-        SELECT *
-        FROM "StockAdjustment"
-        WHERE "businessId" = $1
-          AND module = $2::"BusinessModule"
-          AND ($3::text IS NULL OR status = $3::"AdjustmentStatus")
-        ORDER BY "createdAt" DESC
+        SELECT
+          sa.*,
+          row_to_json(created_by.*) AS "createdBy",
+          row_to_json(reviewed_by.*) AS "reviewedBy",
+          COALESCE(items.items, '[]'::json) AS items
+        FROM "StockAdjustment" sa
+        LEFT JOIN "User" created_by ON created_by.id = sa."createdById"
+        LEFT JOIN "User" reviewed_by ON reviewed_by.id = sa."reviewedById"
+        LEFT JOIN LATERAL (
+          SELECT json_agg(
+            json_build_object(
+              'id', sai.id,
+              'quantityChange', sai."quantityChange",
+              'inventoryItem', json_build_object(
+                'id', ii.id,
+                'name', ii.name,
+                'category', ii.category,
+                'unit', ii.unit
+              ),
+              'location', json_build_object(
+                'id', l.id,
+                'name', l.name
+              )
+            )
+            ORDER BY sai."createdAt"
+          ) AS items
+          FROM "StockAdjustmentItem" sai
+          LEFT JOIN "InventoryItem" ii ON ii.id = sai."inventoryItemId"
+          LEFT JOIN "Location" l ON l.id = sai."locationId"
+          WHERE sai."adjustmentId" = sa.id
+        ) items ON TRUE
+        WHERE sa."businessId" = $1
+          AND sa.module = $2::"BusinessModule"
+          AND ($3::text IS NULL OR sa.status = $3::"AdjustmentStatus")
+        ORDER BY sa."createdAt" DESC
       `,
       [scope.businessId, query.module ?? scope.module, query.status ?? null],
     );
     return this.paged(rows);
+  }
+
+  async createAdjustment(headers: HeadersLike, body: Record<string, unknown>) {
+    const scope = await this.resolveScope(headers);
+    const module = String(body.module ?? scope.module);
+    const items = Array.isArray(body.items)
+      ? (body.items as Record<string, unknown>[])
+      : [];
+    if (!String(body.reason ?? "").trim()) {
+      throw new BadRequestException("Adjustment reason is required.");
+    }
+    if (!items.length) {
+      throw new BadRequestException(
+        "At least one adjustment item is required.",
+      );
+    }
+
+    const adjustmentId = randomUUID();
+    const adjustmentNumber = `ADJ-${Date.now()}`;
+
+    await this.databaseService.withTransaction(async (client) => {
+      await client.query(
+        `
+          INSERT INTO "StockAdjustment" (
+            id, "adjustmentNumber", type, reason, status,
+            "businessId", module, "createdById", "updatedAt"
+          )
+          VALUES ($1, $2, $3::"AdjustmentType", $4, 'PENDING',
+            $5, $6::"BusinessModule", $7, CURRENT_TIMESTAMP)
+        `,
+        [
+          adjustmentId,
+          adjustmentNumber,
+          String(body.type ?? "DAMAGE"),
+          String(body.reason).trim(),
+          scope.businessId,
+          module,
+          scope.user.id === "pos-bridge" ? null : scope.user.id,
+        ],
+      );
+
+      for (const item of items) {
+        const inventoryItemId = String(item.inventoryItemId ?? "");
+        const locationId = String(item.locationId ?? "");
+        const quantityChange = Number(item.quantityChange ?? 0);
+        if (
+          !inventoryItemId ||
+          !locationId ||
+          !Number.isFinite(quantityChange) ||
+          quantityChange === 0
+        ) {
+          throw new BadRequestException(
+            "Every adjustment item needs an item, location, and non-zero quantity change.",
+          );
+        }
+
+        const exists = await client.query<{ id: string }>(
+          `SELECT id FROM "InventoryItem" WHERE id = $1 AND "businessId" = $2 LIMIT 1`,
+          [inventoryItemId, scope.businessId],
+        );
+        if (!exists.rows[0]) {
+          throw new BadRequestException(
+            "One or more inventory items are unavailable for this business.",
+          );
+        }
+
+        await client.query(
+          `
+            INSERT INTO "StockAdjustmentItem" (
+              id, "adjustmentId", "inventoryItemId", "quantityChange", "locationId"
+            )
+            VALUES ($1, $2, $3, $4, $5)
+          `,
+          [
+            randomUUID(),
+            adjustmentId,
+            inventoryItemId,
+            quantityChange,
+            locationId,
+          ],
+        );
+      }
+    });
+
+    return this.getAdjustmentById(scope.businessId, module, adjustmentId);
+  }
+
+  async approveAdjustment(
+    headers: HeadersLike,
+    id: string,
+    query: Record<string, string | undefined>,
+  ) {
+    const scope = await this.resolveScope(headers);
+    if (!["Admin", "Manager"].includes(scope.user.role)) {
+      throw new ForbiddenException(
+        "Only Admin or Manager can approve adjustments.",
+      );
+    }
+    const module = query.module ?? scope.module;
+
+    await this.databaseService.withTransaction(async (client) => {
+      const adjustmentResult = await client.query<{
+        id: string;
+        adjustmentNumber: string;
+        type: string;
+        reason: string;
+        status: string;
+      }>(
+        `
+          SELECT id, "adjustmentNumber", type::text, reason, status::text
+          FROM "StockAdjustment"
+          WHERE id = $1 AND "businessId" = $2 AND module = $3::"BusinessModule"
+          LIMIT 1
+        `,
+        [id, scope.businessId, module],
+      );
+      const adjustment = adjustmentResult.rows[0];
+      if (!adjustment) throw new NotFoundException("Adjustment was not found.");
+      if (adjustment.status !== "PENDING") {
+        throw new BadRequestException(
+          "Only pending adjustments can be approved.",
+        );
+      }
+
+      const adjustmentItems = await client.query<{
+        id: string;
+        inventoryItemId: string;
+        quantityChange: number;
+        locationId: string;
+      }>(
+        `
+          SELECT id, "inventoryItemId", "quantityChange", "locationId"
+          FROM "StockAdjustmentItem"
+          WHERE "adjustmentId" = $1
+          ORDER BY "createdAt" ASC
+        `,
+        [id],
+      );
+
+      for (const adjustmentItem of adjustmentItems.rows) {
+        const itemResult = await client.query<{
+          id: string;
+          name: string;
+          quantity: number;
+          unit: string | null;
+        }>(
+          `SELECT id, name, quantity, unit FROM "InventoryItem" WHERE id = $1 AND "businessId" = $2 LIMIT 1`,
+          [adjustmentItem.inventoryItemId, scope.businessId],
+        );
+        const item = itemResult.rows[0];
+        if (!item) throw new NotFoundException("Inventory item was not found.");
+
+        const previousQuantity = Number(item.quantity ?? 0);
+        const quantityChange = Number(adjustmentItem.quantityChange ?? 0);
+        const newQuantity = previousQuantity + quantityChange;
+        if (newQuantity < 0) {
+          throw new BadRequestException(
+            `Applying this adjustment would make "${item.name}" quantity negative.`,
+          );
+        }
+
+        await client.query(
+          `UPDATE "InventoryItem" SET quantity = $2, "updatedAt" = CURRENT_TIMESTAMP WHERE id = $1`,
+          [item.id, newQuantity],
+        );
+        await client.query(
+          `
+            INSERT INTO "StockMovement" (
+              id, type, quantity, "previousQuantity", "newQuantity", unit,
+              reason, "referenceType", "referenceId", notes, "itemId",
+              "locationId", "businessId", module, "createdById"
+            )
+            VALUES ($1, 'ADJUSTMENT', $2, $3, $4, $5,
+              $6, 'ADJUSTMENT', $7, $8, $9,
+              $10, $11, $12::"BusinessModule", $13)
+          `,
+          [
+            randomUUID(),
+            Math.abs(quantityChange),
+            previousQuantity,
+            newQuantity,
+            item.unit,
+            adjustment.reason,
+            adjustment.id,
+            `${adjustment.type} adjustment: ${adjustment.adjustmentNumber}`,
+            item.id,
+            adjustmentItem.locationId,
+            scope.businessId,
+            module,
+            scope.user.id === "pos-bridge" ? null : scope.user.id,
+          ],
+        );
+      }
+
+      await client.query(
+        `
+          UPDATE "StockAdjustment"
+          SET status = 'APPROVED',
+              "reviewedById" = $2,
+              "reviewedAt" = CURRENT_TIMESTAMP,
+              "updatedAt" = CURRENT_TIMESTAMP
+          WHERE id = $1
+        `,
+        [id, scope.user.id === "pos-bridge" ? null : scope.user.id],
+      );
+    });
+
+    return this.getAdjustmentById(scope.businessId, module, id);
+  }
+
+  async rejectAdjustment(
+    headers: HeadersLike,
+    id: string,
+    query: Record<string, string | undefined>,
+    reason: string,
+  ) {
+    const scope = await this.resolveScope(headers);
+    if (!["Admin", "Manager"].includes(scope.user.role)) {
+      throw new ForbiddenException(
+        "Only Admin or Manager can reject adjustments.",
+      );
+    }
+    if (!reason.trim())
+      throw new BadRequestException("A rejection reason is required.");
+
+    const module = query.module ?? scope.module;
+    const rows = await this.safeQuery<{ id: string; status: string }>(
+      `
+        UPDATE "StockAdjustment"
+        SET status = 'REJECTED',
+            "rejectionReason" = $4,
+            "reviewedById" = $5,
+            "reviewedAt" = CURRENT_TIMESTAMP,
+            "updatedAt" = CURRENT_TIMESTAMP
+        WHERE id = $1
+          AND "businessId" = $2
+          AND module = $3::"BusinessModule"
+          AND status = 'PENDING'
+        RETURNING id, status::text
+      `,
+      [
+        id,
+        scope.businessId,
+        module,
+        reason.trim(),
+        scope.user.id === "pos-bridge" ? null : scope.user.id,
+      ],
+    );
+    if (!rows[0])
+      throw new NotFoundException("Pending adjustment was not found.");
+    return this.getAdjustmentById(scope.businessId, module, id);
+  }
+
+  private async getAdjustmentById(
+    businessId: string,
+    module: string,
+    id: string,
+  ) {
+    const rows = await this.safeQuery<Record<string, unknown>>(
+      `
+        SELECT
+          sa.*,
+          row_to_json(created_by.*) AS "createdBy",
+          row_to_json(reviewed_by.*) AS "reviewedBy",
+          COALESCE(items.items, '[]'::json) AS items
+        FROM "StockAdjustment" sa
+        LEFT JOIN "User" created_by ON created_by.id = sa."createdById"
+        LEFT JOIN "User" reviewed_by ON reviewed_by.id = sa."reviewedById"
+        LEFT JOIN LATERAL (
+          SELECT json_agg(
+            json_build_object(
+              'id', sai.id,
+              'quantityChange', sai."quantityChange",
+              'inventoryItem', json_build_object(
+                'id', ii.id,
+                'name', ii.name,
+                'category', ii.category,
+                'unit', ii.unit
+              ),
+              'location', json_build_object(
+                'id', l.id,
+                'name', l.name
+              )
+            )
+            ORDER BY sai."createdAt"
+          ) AS items
+          FROM "StockAdjustmentItem" sai
+          LEFT JOIN "InventoryItem" ii ON ii.id = sai."inventoryItemId"
+          LEFT JOIN "Location" l ON l.id = sai."locationId"
+          WHERE sai."adjustmentId" = sa.id
+        ) items ON TRUE
+        WHERE sa.id = $1
+          AND sa."businessId" = $2
+          AND sa.module = $3::"BusinessModule"
+        LIMIT 1
+      `,
+      [id, businessId, module],
+    );
+    if (!rows[0]) throw new NotFoundException("Adjustment was not found.");
+    return rows[0];
   }
 
   async listRestaurantSettings(headers: HeadersLike) {
@@ -735,7 +1221,11 @@ export class InventoryApiService {
     );
   }
 
-  async upsertRestaurantSetting(headers: HeadersLike, key: string, value: unknown) {
+  async upsertRestaurantSetting(
+    headers: HeadersLike,
+    key: string,
+    value: unknown,
+  ) {
     const scope = await this.resolveScope(headers);
     const rows = await this.safeQuery<Record<string, unknown>>(
       `
@@ -755,7 +1245,8 @@ export class InventoryApiService {
       `DELETE FROM "${tableName}" WHERE id = $1 RETURNING *`,
       [id],
     );
-    if (!rows[0]) throw new NotFoundException(`${tableName} row was not found.`);
+    if (!rows[0])
+      throw new NotFoundException(`${tableName} row was not found.`);
     return rows[0];
   }
 
@@ -770,15 +1261,20 @@ export class InventoryApiService {
       `,
       [businessId],
     );
-    if (!rows[0]) throw new NotFoundException('No inventory location exists for this business.');
+    if (!rows[0])
+      throw new NotFoundException(
+        "No inventory location exists for this business.",
+      );
     return rows[0].id;
   }
 
   private async resolveScope(headers: HeadersLike): Promise<Scope> {
-    const storeType = this.headerValue(headers['x-pos-store-type']);
-    const module: BusinessModule = storeType === 'RESTAURANT' ? 'RESTAURANT' : 'RETAIL';
-    const bridgedEmail = this.headerValue(headers['x-pos-bridge-email']);
-    const fallbackEmail = module === 'RESTAURANT' ? 'admin@restaurant.com' : 'admin@retail.com';
+    const storeType = this.headerValue(headers["x-pos-store-type"]);
+    const module: BusinessModule =
+      storeType === "RESTAURANT" ? "RESTAURANT" : "RETAIL";
+    const bridgedEmail = this.headerValue(headers["x-pos-bridge-email"]);
+    const fallbackEmail =
+      module === "RESTAURANT" ? "admin@restaurant.com" : "admin@retail.com";
     const email = bridgedEmail || fallbackEmail;
 
     const userRows = await this.safeQuery<{
@@ -808,7 +1304,7 @@ export class InventoryApiService {
 
     let user = userRows[0];
     if (!user && email !== fallbackEmail) {
-      const fallbackRows = await this.safeQuery<typeof userRows[number]>(
+      const fallbackRows = await this.safeQuery<(typeof userRows)[number]>(
         `
           SELECT
             u.id, u.name, u.email, u.role, u.status,
@@ -837,7 +1333,10 @@ export class InventoryApiService {
       };
     }
 
-    const businessRows = await this.safeQuery<{ id: string; modules: BusinessModule[] }>(
+    const businessRows = await this.safeQuery<{
+      id: string;
+      modules: BusinessModule[];
+    }>(
       `
         SELECT id, modules
         FROM "Business"
@@ -848,17 +1347,20 @@ export class InventoryApiService {
       [module],
     );
     const business = businessRows[0];
-    if (!business) throw new NotFoundException('No inventory business exists for this POS store type.');
+    if (!business)
+      throw new NotFoundException(
+        "No inventory business exists for this POS store type.",
+      );
 
     return {
       businessId: business.id,
       module,
       user: {
-        id: 'pos-bridge',
-        name: 'POS Bridge',
+        id: "pos-bridge",
+        name: "POS Bridge",
         email,
-        role: 'Admin',
-        status: 'Active',
+        role: "Admin",
+        status: "Active",
         businessId: business.id,
         modules: business.modules ?? [module],
         lastLogin: new Date().toISOString(),
@@ -866,12 +1368,15 @@ export class InventoryApiService {
     };
   }
 
-  private async safeQuery<T extends QueryResultRow>(sql: string, params: unknown[] = []): Promise<T[]> {
+  private async safeQuery<T extends QueryResultRow>(
+    sql: string,
+    params: unknown[] = [],
+  ): Promise<T[]> {
     try {
       return await this.databaseService.query<T>(sql, params);
     } catch (error) {
       const dbError = error as { code?: string };
-      if (dbError.code === '42P01') {
+      if (dbError.code === "42P01") {
         return [];
       }
       throw error;

@@ -16,7 +16,8 @@
     "db:fix-sequences": "node scripts/fix-sequences.js",
     "db:migrate-product-codes": "node scripts/migrate-numeric-product-codes.js",
     "db:merge-inventory": "node scripts/merge-inventory-database.js",
-    "db:sync-inventory-catalog": "node scripts/sync-inventory-catalog.js"
+    "db:sync-inventory-catalog": "node scripts/sync-inventory-catalog.js",
+    "db:repair-unified": "node scripts/repair-unified-pos-inventory.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.24",

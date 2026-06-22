@@ -12,6 +12,7 @@ export type ViewType =
   | 'products-received'
   | 'item-bundling'
   | 'transfers'
+  | 'stock-adjustments'
   | 'multilocation'
   | 'reports'
   | 'user-management'
@@ -29,6 +30,7 @@ export type ViewType =
   | 'restaurant-pos'
   | 'restaurant-recipe-bom'
   | 'restaurant-transfers'
+  | 'restaurant-stock-adjustments'
   | 'restaurant-reports'
   | 'restaurant-multilocation';
 

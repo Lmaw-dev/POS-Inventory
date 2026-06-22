@@ -1,5 +1,6 @@
 export * from './shared';
 export * from './inventoryQueries';
+export * from './adjustmentQueries';
 export * from './locationQueries';
 export * from './purchaseOrderQueries';
 export * from './transferQueries';

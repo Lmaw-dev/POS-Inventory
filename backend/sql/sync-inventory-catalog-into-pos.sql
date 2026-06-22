@@ -1,6 +1,9 @@
 ALTER TABLE products
   ADD COLUMN IF NOT EXISTS inventory_item_id TEXT;
 
+ALTER TABLE "InventoryItem"
+  ADD COLUMN IF NOT EXISTS description TEXT;
+
 ALTER TABLE product_variants
   ADD COLUMN IF NOT EXISTS inventory_item_id TEXT;
 
@@ -54,7 +57,22 @@ WITH store_business AS (
         ) THEN 0
         ELSE 1
       END,
-      b."createdAt" ASC
+      CASE
+        WHEN s.store_type IN ('RETAIL', 'RETAIL_STORE') THEN (
+          SELECT COUNT(*)
+          FROM "InventoryItem" i
+          WHERE i."businessId" = b.id
+            AND i."itemType" = 'RETAIL_ITEM'::"InventoryItemType"
+        )
+        ELSE (
+          SELECT COUNT(*)
+          FROM "Recipe" r
+          WHERE r."businessId" = b.id
+            AND COALESCE(r."isActive", TRUE) = TRUE
+            AND r."menuItemId" IS NOT NULL
+        )
+      END DESC,
+      b."createdAt" DESC
     LIMIT 1
   ) b ON TRUE
 ),
@@ -97,7 +115,33 @@ WITH store_business AS (
       s.store_type = 'RESTAURANT'
       AND 'RESTAURANT'::"BusinessModule" = ANY(b.modules)
     )
-    ORDER BY b."createdAt" ASC
+    ORDER BY
+      CASE
+        WHEN EXISTS (
+          SELECT 1
+          FROM users pu
+          JOIN "User" iu ON lower(iu.email) = lower(pu.email)
+          WHERE pu.store_id = s.id
+            AND iu."businessId" = b.id
+        ) THEN 0
+        ELSE 1
+      END,
+      CASE
+        WHEN s.store_type IN ('RETAIL', 'RETAIL_STORE') THEN (
+          SELECT COUNT(*)
+          FROM "InventoryItem" i
+          WHERE i."businessId" = b.id
+            AND i."itemType" = 'RETAIL_ITEM'::"InventoryItemType"
+        )
+        ELSE (
+          SELECT COUNT(*)
+          FROM "Recipe" r
+          WHERE r."businessId" = b.id
+            AND COALESCE(r."isActive", TRUE) = TRUE
+            AND r."menuItemId" IS NOT NULL
+        )
+      END DESC,
+      b."createdAt" DESC
     LIMIT 1
   ) b ON TRUE
 ),
@@ -158,8 +202,8 @@ SELECT
   src.barcode,
   src.unit,
   src.size,
-  COALESCE(src.quantity, 0),
-  COALESCE(src."minStock", 0),
+  FLOOR(COALESCE(src.quantity, 0))::int,
+  FLOOR(COALESCE(src."minStock", 0))::int,
   TRUE,
   src.inventory_item_id
 FROM item_source src
@@ -234,7 +278,25 @@ WITH store_business AS (
     FROM "Business" b
     WHERE s.store_type = 'RESTAURANT'
       AND 'RESTAURANT'::"BusinessModule" = ANY(b.modules)
-    ORDER BY b."createdAt" ASC
+    ORDER BY
+      CASE
+        WHEN EXISTS (
+          SELECT 1
+          FROM users pu
+          JOIN "User" iu ON lower(iu.email) = lower(pu.email)
+          WHERE pu.store_id = s.id
+            AND iu."businessId" = b.id
+        ) THEN 0
+        ELSE 1
+      END,
+      (
+        SELECT COUNT(*)
+        FROM "Recipe" r
+        WHERE r."businessId" = b.id
+          AND COALESCE(r."isActive", TRUE) = TRUE
+          AND r."menuItemId" IS NOT NULL
+      ) DESC,
+      b."createdAt" DESC
     LIMIT 1
   ) b ON TRUE
 )
